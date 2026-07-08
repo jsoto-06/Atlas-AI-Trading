@@ -21,7 +21,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 1. GET /api/v1/telemetry/state
    * Retorna una instantánea filtrada por TTL de todo el Blackboard de memoria.
    */
-  fastify.get('/api/v1/telemetry/state', {
+  fastify.get('/state', {
     schema: {
       description: 'Obtiene el estado completo y activo del Blackboard en memoria (filtrado por TTL).',
       tags: ['telemetria'],
@@ -52,7 +52,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 2. GET /api/v1/telemetry/performance
    * Genera en tiempo real (Big-O optimizado) el informe de analítica y métricas ajustadas al riesgo.
    */
-  fastify.get('/api/v1/telemetry/performance', {
+  fastify.get('/performance', {
     schema: {
       description: 'Calcula el Sharpe, Sortino, Profit Factor, Max Drawdown y métricas adicionales de los trades cerrados.',
       tags: ['telemetria'],
@@ -90,7 +90,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 3. GET /api/v1/telemetry/regime
    * Recupera el régimen de mercado activo y la calibración paramétrica de los agentes.
    */
-  fastify.get('/api/v1/telemetry/regime', {
+  fastify.get('/regime', {
     schema: {
       description: 'Obtiene el régimen del mercado activo diagnosticado y los pesos paramétricos calibrados.',
       tags: ['telemetria'],
@@ -179,7 +179,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 4. GET /api/v1/telemetry/history
    * Consulta paginada histórica del rendimiento de calibración de parámetros (learning_performance).
    */
-  fastify.get('/api/v1/telemetry/history', {
+  fastify.get('/history', {
     schema: {
       description: 'Obtiene el registro cronológico e histórico de adaptaciones aplicadas por el agente de aprendizaje.',
       tags: ['telemetria'],
@@ -275,7 +275,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 5. GET /api/v1/telemetry/config
    * Recupera la configuración actual de API de Bitget enmascarada para resguardar la seguridad.
    */
-  fastify.get('/api/v1/telemetry/config', {
+  fastify.get('/config', {
     schema: {
       description: 'Recupera la configuración actual de API de Bitget enmascarada por seguridad.',
       tags: ['telemetria'],
@@ -309,7 +309,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 6. POST /api/v1/telemetry/config
    * Actualiza dinámicamente las credenciales de API de Bitget y el entorno operativo.
    */
-  fastify.post('/api/v1/telemetry/config', {
+  fastify.post('/config', {
     schema: {
       description: 'Actualiza dinámicamente las credenciales de API de Bitget y el entorno operativo de forma inmutable.',
       tags: ['telemetria'],
