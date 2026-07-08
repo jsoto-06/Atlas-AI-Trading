@@ -9,6 +9,7 @@ import { settings, learningPerformance, trades } from '../../db/schema.ts';
 import { Blackboard } from '../../core/blackboard.ts';
 import { MetricsCalculator } from '../../analytics/metrics-calculator.ts';
 import { eq, desc } from 'drizzle-orm';
+import { BitgetBroker } from '../../execution/brokers/bitget-broker.ts';
 
 /**
  * Plugin de rutas Fastify para Telemetría y Conciliación de Estados (solo lectura GET).
@@ -351,6 +352,64 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
       };
     } catch (error: any) {
       fastify.log.error(`Error en POST /telemetry/config: ${error.message}`);
+      (reply as any).status(500).send({ error: 'Internal Server Error', message: error.message });
+    }
+  });
+
+  /**
+   * 7. GET /api/v1/telemetry/balances
+   * Obtiene los balances de USDT para Demo y Real en caliente.
+   */
+  fastify.get('/balances', {
+    schema: {
+      description: 'Obtiene el balance disponible de USDT tanto en Demo como en Cuenta Real de Bitget.',
+      tags: ['telemetria'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            demo: { type: 'number' },
+            real: { type: 'number' },
+            activeMode: { type: 'string' },
+            timestamp: { type: 'number' }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const originalModo = process.env.BITGET_MODO_REAL;
+      const broker = new BitgetBroker();
+
+      // Consultar Demo Balance
+      process.env.BITGET_MODO_REAL = 'false';
+      let demoBalance = 10000;
+      try {
+        demoBalance = await broker.getBalance('USDT');
+      } catch (e) {
+        fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Demo: ${e}`);
+      }
+
+      // Consultar Real Balance
+      process.env.BITGET_MODO_REAL = 'true';
+      let realBalance = 10000;
+      try {
+        realBalance = await broker.getBalance('USDT');
+      } catch (e) {
+        fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Real: ${e}`);
+      }
+
+      // Restablecer el original
+      process.env.BITGET_MODO_REAL = originalModo;
+
+      return {
+        demo: demoBalance,
+        real: realBalance,
+        activeMode: originalModo === 'true' ? 'real' : 'demo',
+        timestamp: Date.now()
+      };
+    } catch (error: any) {
+      fastify.log.error(`Error en GET /telemetry/balances: ${error.message}`);
       (reply as any).status(500).send({ error: 'Internal Server Error', message: error.message });
     }
   });

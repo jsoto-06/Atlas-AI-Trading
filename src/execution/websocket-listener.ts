@@ -184,16 +184,19 @@ export class BitgetWebSocketListener {
   private suscribirCanalesPrivados(): void {
     console.log('[WS-Listener] Autenticado con éxito. Suscribiendo a canales de telemetría de órdenes y posiciones...');
 
+    const isReal = process.env.BITGET_MODO_REAL === 'true';
+    const targetInstType = isReal ? 'USDT-FUTURES' : 'SUSDT-FUTURES';
+
     const subscriptionPayload = {
       op: 'subscribe',
       args: [
         {
-          instType: 'USDT-FUTURES',
+          instType: targetInstType,
           channel: 'orders',
           instId: 'default'
         },
         {
-          instType: 'USDT-FUTURES',
+          instType: targetInstType,
           channel: 'positions',
           instId: 'default'
         }

@@ -43,18 +43,56 @@ export class BitgetBroker extends BaseBroker {
   }
 
   /**
-   * Traduce un símbolo común como "BTC/USDT" al formato adecuado de Bitget (S- para Demo o sin S- para Real).
+   * Traduce un símbolo común como "BTC/USDT" al formato adecuado de Bitget (SBTCSUSDT para Demo o BTCUSDT para Real).
    */
   private mapSymbol(symbol: string): string {
-    const clean = symbol.replace('/', '');
+    const clean = symbol.replace('/', '').toUpperCase();
     const isReal = process.env.BITGET_MODO_REAL === 'true';
     if (isReal) {
       if (clean.startsWith('S-')) {
         return clean.substring(2);
       }
+      if (clean.startsWith('S') && clean.endsWith('SUSDT') && clean.length > 6) {
+        const base = clean.substring(1, clean.length - 5);
+        return `${base}USDT`;
+      }
+      if (clean.startsWith('S') && clean.endsWith('SUSDC') && clean.length > 6) {
+        const base = clean.substring(1, clean.length - 5);
+        return `${base}USDC`;
+      }
       return clean;
     } else {
-      if (!clean.startsWith('S-')) {
+      // Modo Demo (Simulado)
+      // Bitget utiliza el formato SBTCSUSDT para simulado (S + base + S + quote)
+      if (clean.endsWith('USDT')) {
+        const base = clean.substring(0, clean.length - 4);
+        if (clean.startsWith('S') && clean.endsWith('SUSDT') && clean.length > 6) {
+          return clean;
+        }
+        let normalizedBase = base;
+        if (base.startsWith('S-')) {
+          normalizedBase = base.substring(2);
+        } else if (base.startsWith('S') && base.length > 3) {
+          normalizedBase = base.substring(1);
+        }
+        return `S${normalizedBase}SUSDT`;
+      }
+      if (clean.endsWith('USDC')) {
+        const base = clean.substring(0, clean.length - 4);
+        if (clean.startsWith('S') && clean.endsWith('SUSDC') && clean.length > 6) {
+          return clean;
+        }
+        let normalizedBase = base;
+        if (base.startsWith('S-')) {
+          normalizedBase = base.substring(2);
+        } else if (base.startsWith('S') && base.length > 3) {
+          normalizedBase = base.substring(1);
+        }
+        return `S${normalizedBase}SUSDC`;
+      }
+      
+      // Fallback
+      if (!clean.startsWith('S-') && !clean.startsWith('S')) {
         return `S-${clean}`;
       }
       return clean;
@@ -188,7 +226,7 @@ export class BitgetBroker extends BaseBroker {
       const payload = {
         symbol: mappedSymbol,
         productType: this.getProductType(),
-        marginCoin: 'USDT',
+        marginCoin: isReal ? 'USDT' : 'SUSDT',
         size: formattedSize,
         side: request.lado === 'BUY' ? 'buy' : 'sell',
         tradeMode: 'cross',
@@ -245,11 +283,17 @@ export class BitgetBroker extends BaseBroker {
   public async getBalance(asset: string): Promise<number> {
     try {
       const isReal = process.env.BITGET_MODO_REAL === 'true';
-      console.log(`[BitgetBroker] [GET /api/v2/mix/account/accounts] Solicitando balance de margen (${isReal ? 'Real' : 'Demo'}) para: ${asset}`);
-      const accounts = await this.sendRequest('GET', '/api/v2/mix/account/accounts', { productType: this.getProductType() });
+      const targetProductType = this.getProductType();
+      const queryAsset = isReal ? asset.toUpperCase() : (asset.toUpperCase() === 'USDT' ? 'SUSDT' : asset.toUpperCase());
+      
+      console.log(`[BitgetBroker] [GET /api/v2/mix/account/accounts] Solicitando balance de margen (${isReal ? 'Real' : 'Demo'}) para target asset: ${queryAsset}, productType: ${targetProductType}`);
+      const accounts = await this.sendRequest('GET', '/api/v2/mix/account/accounts', { productType: targetProductType });
       
       if (Array.isArray(accounts)) {
-        const matched = accounts.find((acc: any) => acc.marginCoin === asset);
+        const matched = accounts.find((acc: any) => 
+          acc.marginCoin.toUpperCase() === queryAsset || 
+          acc.marginCoin.toUpperCase() === asset.toUpperCase()
+        );
         if (matched) {
           const available = parseFloat(matched.available || matched.equity || '0');
           if (!isNaN(available)) {
@@ -257,10 +301,10 @@ export class BitgetBroker extends BaseBroker {
           }
         }
       }
-      return 10000;
+      return 0;
     } catch (error: any) {
-      console.warn(`[BitgetBroker] Error al obtener balance real: ${error?.message || error}. Usando balance demo de contingencia ($10,000 USDT).`);
-      return 10000;
+      console.warn(`[BitgetBroker] Error al obtener balance real: ${error?.message || error}. Retornando 0 como contingencia.`);
+      return 0;
     }
   }
 
@@ -321,7 +365,7 @@ export class BitgetBroker extends BaseBroker {
         const payload = {
           symbol: mappedSymbol,
           productType: this.getProductType(),
-          marginCoin: 'USDT',
+          marginCoin: isReal ? 'USDT' : 'SUSDT',
           size: absSize.toString(),
           side: sideClose,
           tradeMode: 'cross',

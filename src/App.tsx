@@ -9,7 +9,7 @@ import {
   Activity, BookOpen, AlertTriangle, Play, Settings, Bell, FileText, 
   Terminal, Cpu, DollarSign, ArrowUpRight, ArrowDownRight, Info, CheckCircle2, 
   ChevronRight, HelpCircle, Eye, Sliders, BarChart2, ShieldCheck,
-  EyeOff, Lock, Key
+  EyeOff, Lock, Key, Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AgentName, AgentAssessment, MarketDirection, ApiConfigState } from './types.ts';
@@ -197,6 +197,29 @@ export default function App() {
   const [showApiSecret, setShowApiSecret] = useState(false);
   const [showPassphrase, setShowPassphrase] = useState(false);
 
+  // Bitget Balances State
+  const [balances, setBalances] = useState<{ demo: number; real: number; activeMode: 'demo' | 'real' }>({
+    demo: 10000,
+    real: 10000,
+    activeMode: 'demo'
+  });
+
+  const fetchBalances = async () => {
+    try {
+      const res = await fetch('/api/v1/telemetry/balances');
+      if (res.ok) {
+        const data = await res.json();
+        setBalances({
+          demo: typeof data.demo === 'number' ? data.demo : 10000,
+          real: typeof data.real === 'number' ? data.real : 10000,
+          activeMode: data.activeMode || 'demo'
+        });
+      }
+    } catch (err) {
+      console.error('Error al obtener balances:', err);
+    }
+  };
+
   const fetchApiConfig = async () => {
     setApiConfigLoading(true);
     setApiConfigMessage(null);
@@ -236,6 +259,7 @@ export default function App() {
         setApiConfigMessage({ type: 'success', text: data.mensaje || 'Configuración guardada exitosamente.' });
         // Re-obtener credenciales para refrescar la enmascaración de claves
         await fetchApiConfig();
+        await fetchBalances();
       } else {
         const data = await res.json().catch(() => ({}));
         setApiConfigMessage({ type: 'error', text: data.message || 'Error al guardar la configuración de API.' });
@@ -250,6 +274,9 @@ export default function App() {
 
   useEffect(() => {
     fetchApiConfig();
+    fetchBalances();
+    const interval = setInterval(fetchBalances, 6000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1095,7 +1122,7 @@ export default function App() {
       </header>
 
       {/* Primary KPI Stats Area */}
-      <section className="bg-[#090b12] border-b border-[#131726]/60 p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 shadow-inner">
+      <section className="bg-[#090b12] border-b border-[#131726]/60 p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 shadow-inner">
         {/* Price KPI */}
         <div className="bg-[#0f1222]/80 border border-[#1d2340]/60 rounded-xl p-4 flex items-center justify-between transition-all duration-300 hover:border-[#2b335c]/80">
           <div>
@@ -1113,6 +1140,32 @@ export default function App() {
             priceDirection === 'UP' ? 'bg-emerald-950/40 text-emerald-400' : priceDirection === 'DOWN' ? 'bg-rose-950/40 text-rose-400' : 'bg-slate-900 text-slate-400'
           }`}>
             {priceDirection === 'UP' ? <ArrowUpRight className="w-5 h-5" /> : priceDirection === 'DOWN' ? <ArrowDownRight className="w-5 h-5" /> : <Activity className="w-5 h-5" />}
+          </div>
+        </div>
+
+        {/* Balances KPI */}
+        <div className="bg-[#0f1222]/80 border border-[#1d2340]/60 rounded-xl p-4 flex items-center justify-between transition-all duration-300 hover:border-[#2b335c]/80">
+          <div>
+            <p className="text-[10px] text-slate-400 font-mono tracking-wider">SALDOS DISPONIBLES (USDT)</p>
+            <div className="space-y-1.5 mt-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800/40">DEMO</span>
+                <span className="font-mono text-sm font-bold text-slate-100">${balances.demo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                {balances.activeMode === 'demo' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="Modo Operativo Activo" />}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded font-mono bg-amber-950 text-amber-400 border border-amber-800/40">REAL</span>
+                <span className="font-mono text-sm font-bold text-slate-100">${balances.real.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                {balances.activeMode === 'real' && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" title="Modo Operativo Activo" />}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1 font-mono">
+              <Wallet className="w-3.5 h-3.5 text-indigo-400" />
+              Saldos Cuenta de Futuros
+            </p>
+          </div>
+          <div className="p-3 bg-[#0c1322] text-indigo-400 rounded-lg border border-[#182645]">
+            <Wallet className="w-5 h-5" />
           </div>
         </div>
 
