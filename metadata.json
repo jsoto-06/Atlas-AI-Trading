@@ -1,0 +1,6 @@
+{
+  "name": "Atlas AI Trading",
+  "description": "Institutional-grade multi-agent quantitative trading platform featuring Technical, News, Sentiment, On-Chain, Order Flow, Correlation, Backtesting, and Risk Management agents orchestrated by a Blackboard supervisor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
