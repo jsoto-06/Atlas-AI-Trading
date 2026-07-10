@@ -192,6 +192,10 @@ export default function App() {
   const [apiConfigSaving, setApiConfigSaving] = useState(false);
   const [apiConfigMessage, setApiConfigMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // Token de Administrador (Authorization: Bearer <ADMIN_API_TOKEN>)
+  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem('ADMIN_API_TOKEN') || '');
+  const [showAdminToken, setShowAdminToken] = useState(false);
+
   // API Config visibility states
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiSecret, setShowApiSecret] = useState(false);
@@ -205,8 +209,13 @@ export default function App() {
   });
 
   const fetchBalances = async () => {
+    if (!adminToken) return;
     try {
-      const res = await fetch('/api/v1/telemetry/balances');
+      const res = await fetch('/api/v1/telemetry/balances', {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setBalances({
@@ -214,6 +223,8 @@ export default function App() {
           real: typeof data.real === 'number' ? data.real : 10000,
           activeMode: data.activeMode || 'demo'
         });
+      } else if (res.status === 401) {
+        console.warn('Unauthorized balances query: Token de Administrador inválido.');
       }
     } catch (err) {
       console.error('Error al obtener balances:', err);
@@ -221,10 +232,18 @@ export default function App() {
   };
 
   const fetchApiConfig = async () => {
+    if (!adminToken) {
+      setApiConfigMessage({ type: 'error', text: 'Introduce tu Token de Administrador para gestionar la configuración de Bitget.' });
+      return;
+    }
     setApiConfigLoading(true);
     setApiConfigMessage(null);
     try {
-      const res = await fetch('/api/v1/telemetry/config');
+      const res = await fetch('/api/v1/telemetry/config', {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         setApiConfig({
@@ -233,6 +252,8 @@ export default function App() {
           passphrase: data.passphrase || '',
           modoReal: !!data.modoReal
         });
+      } else if (res.status === 401) {
+        setApiConfigMessage({ type: 'error', text: 'Introduce tu Token de Administrador para gestionar la configuración de Bitget.' });
       } else {
         setApiConfigMessage({ type: 'error', text: 'Error al consultar la configuración de API desde el backend.' });
       }
@@ -246,12 +267,19 @@ export default function App() {
 
   const saveApiConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!adminToken) {
+      setApiConfigMessage({ type: 'error', text: 'Introduce tu Token de Administrador para gestionar la configuración de Bitget.' });
+      return;
+    }
     setApiConfigSaving(true);
     setApiConfigMessage(null);
     try {
       const res = await fetch('/api/v1/telemetry/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
         body: JSON.stringify(apiConfig)
       });
       if (res.ok) {
@@ -260,6 +288,8 @@ export default function App() {
         // Re-obtener credenciales para refrescar la enmascaración de claves
         await fetchApiConfig();
         await fetchBalances();
+      } else if (res.status === 401) {
+        setApiConfigMessage({ type: 'error', text: 'Token de Administrador no válido o expirado.' });
       } else {
         const data = await res.json().catch(() => ({}));
         setApiConfigMessage({ type: 'error', text: data.message || 'Error al guardar la configuración de API.' });
@@ -272,15 +302,27 @@ export default function App() {
     }
   };
 
+  // Sincronizar token en sessionStorage para preservar en la sesión
   useEffect(() => {
-    fetchApiConfig();
-    fetchBalances();
-    const interval = setInterval(fetchBalances, 6000);
-    return () => clearInterval(interval);
-  }, []);
+    sessionStorage.setItem('ADMIN_API_TOKEN', adminToken);
+    if (adminToken) {
+      fetchApiConfig();
+    } else {
+      setApiConfigMessage({ type: 'error', text: 'Introduce tu Token de Administrador para gestionar la configuración de Bitget.' });
+    }
+  }, [adminToken]);
+
+  // Manejar reconexión y sondeo de balances reactivo según el token
+  useEffect(() => {
+    if (adminToken) {
+      fetchBalances();
+      const interval = setInterval(fetchBalances, 6000);
+      return () => clearInterval(interval);
+    }
+  }, [adminToken]);
 
   useEffect(() => {
-    if (activeTab === 'api-config') {
+    if (activeTab === 'api-config' && adminToken) {
       fetchApiConfig();
     }
   }, [activeTab]);
@@ -1652,6 +1694,34 @@ export default function App() {
                             <Shield className="w-4 h-4 text-cyan-400" />
                             <span>Parámetros de Enlace Encriptado (Bitget)</span>
                           </h3>
+
+                          {/* Token de Administrador */}
+                          <div className="space-y-1.5 pb-2 border-b border-[#182645]/40 mb-2">
+                            <label className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1 font-bold">
+                              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                              Token de Administrador (Firma de Seguridad)
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showAdminToken ? 'text' : 'password'}
+                                value={adminToken}
+                                onChange={(e) => setAdminToken(e.target.value)}
+                                placeholder="Introduce tu ADMIN_API_TOKEN..."
+                                className="w-full bg-[#05060a] border border-cyan-500/30 rounded px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 transition-all pr-10"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAdminToken(!showAdminToken)}
+                                className="absolute right-3 top-2 text-slate-400 hover:text-slate-200"
+                              >
+                                {showAdminToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-slate-400 leading-normal">
+                              Requerido para autorizar operaciones y leer configuraciones seguras en el servidor.
+                            </p>
+                          </div>
 
                           {/* API Key */}
                           <div className="space-y-1.5">
