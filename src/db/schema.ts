@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, pgTable, serial, text, timestamp, numeric, jsonb } from 'drizzle-orm/pg-core';
+import { integer, pgTable, serial, text, timestamp, numeric, jsonb, index } from 'drizzle-orm/pg-core';
 
 // 1. Users Table (Linked with Firebase Auth UID)
 export const users = pgTable('users', {
@@ -142,4 +142,17 @@ export const marketCandles = pgTable('market_candles', {
   volume: numeric('volume', { precision: 20, scale: 8 }).notNull(),
   timestamp: timestamp('timestamp').notNull(),
 });
+
+// 10. Market Tickers Table (Historical ticker metrics including open interest)
+export const marketTickers = pgTable('market_tickers', {
+  id: serial('id').primaryKey(),
+  symbol: text('symbol').notNull(),
+  lastPrice: numeric('last_price', { precision: 20, scale: 8 }).notNull(),
+  holdingAmount: numeric('holding_amount', { precision: 20, scale: 8 }).notNull(), // Open Interest / holding amount
+  fundingRate: numeric('funding_rate', { precision: 10, scale: 8 }).notNull(),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+}, (table) => [
+  index('market_tickers_symbol_timestamp_idx').on(table.symbol, table.timestamp)
+]);
+
 

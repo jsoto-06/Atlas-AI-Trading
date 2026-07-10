@@ -33,4 +33,5 @@ export interface NewsAnalystOutput {
   scoreConsolidado: number; // -100 a +100
   confianza: number; // 0.0 a 1.0
   justificacionConsolidada: string;
+  dataSource?: 'GEMINI_ANALYSIS' | 'LOCAL_FALLBACK_ON_REAL_HEADLINES' | 'UNAVAILABLE';
 }

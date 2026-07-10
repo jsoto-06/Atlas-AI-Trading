@@ -16,6 +16,7 @@ export interface LiquidationAnalystOutput {
   simbolo: string;
   temporalidad: string;
   timestamp: number;
+  dataSource: string; // Indica el origen real o estimado del set de datos
   volumenLiquidaciones24h: {
     longsUSD: number;
     shortsUSD: number;

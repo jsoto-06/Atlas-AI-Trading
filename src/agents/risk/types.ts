@@ -18,4 +18,5 @@ export interface RiskManagerAnalystOutput {
   risk_reward_ratio: number; // Ratio riesgo/beneficio (mínimo 1:2)
   rejection_reason: string | null; // Razón de rechazo exacta si safe_to_operate es false
   justificacionConsolidada: string; // Explicación de las operaciones y cálculos en castellano
+  dataSource?: 'REAL_TIME_VERIFIED' | 'UNAVAILABLE';
 }

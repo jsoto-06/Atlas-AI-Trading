@@ -7,8 +7,9 @@ import { BaseAgent } from '../base-agent.ts';
 import { AgentName, AgentAssessment } from '../../types.ts';
 import { RiskManagerAnalystOutput } from './types.ts';
 import { db } from '../../db/index.ts';
-import { settings } from '../../db/schema.ts';
-import { eq } from 'drizzle-orm';
+import { settings, users, trades } from '../../db/schema.ts';
+import { eq, and } from 'drizzle-orm';
+import { mapSymbol, getProductType } from '../../execution/brokers/bitget-utils.ts';
 
 /**
  * Agente Gestor de Riesgos (Risk Manager Agent - Firewall Matemático Determinista).
@@ -73,15 +74,201 @@ export class RiskManagerAgent extends BaseAgent {
   }
 
   /**
+   * Obtiene el spread real de Bitget consultando el libro de órdenes en tiempo real.
+   * Retorna el spread relativo calculado como: (bestAsk - bestBid) / bestBid.
+   */
+  private async fetchBitgetSpread(symbol: string): Promise<number> {
+    const mappedSymbol = mapSymbol(symbol);
+    const productType = getProductType();
+    const depthUrl = `https://api.bitget.com/api/v2/mix/market/merge-depth?symbol=${mappedSymbol}&productType=${productType}&limit=5`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+
+    try {
+      const response = await fetch(depthUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error status: ${response.status}`);
+      }
+
+      const json = await response.json();
+      if (json.code !== '00000' || !json.data) {
+        throw new Error(`Bitget depth API error: ${json.code} - ${json.msg}`);
+      }
+
+      const bids = json.data.bids || [];
+      const asks = json.data.asks || [];
+
+      if (bids.length === 0 || asks.length === 0) {
+        throw new Error('Libro de órdenes vacío (bids o asks no disponibles).');
+      }
+
+      const bestBid = parseFloat(bids[0][0]);
+      const bestAsk = parseFloat(asks[0][0]);
+
+      if (isNaN(bestBid) || isNaN(bestAsk) || bestBid <= 0 || bestAsk <= 0) {
+        throw new Error('Precios del libro de órdenes inválidos o nulos.');
+      }
+
+      const spread = (bestAsk - bestBid) / bestBid;
+      return spread;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.error('[RiskManagerAgent] Error al obtener el spread real de Bitget:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bloquea preventivamente la operación por motivos de seguridad o falta de datos críticos.
+   */
+  private bloquearPorSeguridad(symbol: string, timeframe: string, motivo: string): void {
+    const justificacion = `Operación RECHAZADA por el Firewall de Riesgos determinista. Razón: ${motivo}`;
+
+    const output: RiskManagerAnalystOutput = {
+      simbolo: symbol,
+      temporalidad: timeframe,
+      timestamp: Date.now(),
+      safe_to_operate: false,
+      max_position_size: 0,
+      calculated_stop_loss: 0,
+      calculated_take_profit: 0,
+      trailing_stop_activation: 0,
+      kelly_fraction: 0,
+      risk_reward_ratio: 0,
+      rejection_reason: motivo,
+      justificacionConsolidada: justificacion,
+      dataSource: 'UNAVAILABLE'
+    };
+
+    const assessment: AgentAssessment = {
+      agentName: this.name,
+      timestamp: Date.now(),
+      score: 0,
+      confidence: 0.1,
+      data: output,
+      justification: justificacion
+    };
+
+    this.blackboard.writeAssessment(symbol, timeframe, assessment);
+    console.warn(`[RiskManagerAgent] Firewall bloqueado preventivamente. Motivo: ${motivo}. Safe to operate: false`);
+  }
+
+  /**
    * Ejecuta el diagnóstico de control de riesgo determinista de forma síncrona/fast.
    */
   public async analyze(symbol: string, timeframe: string): Promise<void> {
-    try {
-      console.log(`[RiskManagerAgent] Iniciando firewall matemático determinista para ${symbol}:${timeframe}...`);
+    console.log(`[RiskManagerAgent] Iniciando firewall matemático determinista para ${symbol}:${timeframe}...`);
 
-      const limits = await this.cargarLimitesRiesgo();
+    let userId: number | null = null;
+    let currentDailyDrawdownUSD = 0;
+    let currentTotalDrawdownUSD = 0;
+    let spreadBitget = 0.0004;
+    let queryFailed = false;
+    let failureDetail = '';
+
+    // 1. Obtener límites de riesgo
+    let limits;
+    try {
+      limits = await this.cargarLimitesRiesgo();
+    } catch (err) {
+      limits = this.DEFAULT_RISK_LIMITS;
+    }
+
+    // 2. Determinar el usuario activo y calcular los drawdowns reales desde la base de datos (trades cerrados)
+    try {
+      const filasSettings = await db
+        .select()
+        .from(settings)
+        .where(eq(settings.key, 'global_risk_limits'))
+        .limit(1);
+
+      if (filasSettings && filasSettings.length > 0 && filasSettings[0].userId) {
+        userId = filasSettings[0].userId;
+      } else {
+        const firstUser = await db.select().from(users).limit(1);
+        if (firstUser && firstUser.length > 0) {
+          userId = firstUser[0].id;
+        }
+      }
+
+      if (!userId) {
+        queryFailed = true;
+        failureDetail = 'No se encontró ningún usuario activo registrado en la base de datos o configuraciones.';
+      }
+
+      if (!queryFailed && userId !== null) {
+        // Sumar el campo "pnl" de los trades con status = 'CLOSED' filtrado por usuario activo
+        const closedTrades = await db
+          .select()
+          .from(trades)
+          .where(
+            and(
+              eq(trades.status, 'CLOSED'),
+              eq(trades.userId, userId)
+            )
+          );
+
+        const inicioHoy = new Date();
+        inicioHoy.setHours(0, 0, 0, 0);
+        const inicioHoyTime = inicioHoy.getTime();
+
+        let sumDailyPnL = 0;
+        let sumTotalPnL = 0;
+
+        for (const trade of closedTrades) {
+          const pnlVal = trade.pnl ? parseFloat(trade.pnl) : 0;
+          sumTotalPnL += pnlVal;
+
+          if (trade.exitTime) {
+            const exitTimeMs = new Date(trade.exitTime).getTime();
+            if (exitTimeMs >= inicioHoyTime) {
+              sumDailyPnL += pnlVal;
+            }
+          }
+        }
+
+        currentDailyDrawdownUSD = sumDailyPnL < 0 ? Math.abs(sumDailyPnL) : 0;
+        currentTotalDrawdownUSD = sumTotalPnL < 0 ? Math.abs(sumTotalPnL) : 0;
+
+        console.log(`[RiskManagerAgent] Drawdown real calculado para userId ${userId}: Diario USD: ${currentDailyDrawdownUSD}, Histórico USD: ${currentTotalDrawdownUSD}`);
+      }
+    } catch (dbError) {
+      console.error('[RiskManagerAgent] Error al consultar la base de datos para drawdown:', dbError);
+      queryFailed = true;
+      failureDetail = dbError instanceof Error ? dbError.message : String(dbError);
+    }
+
+    // 3. Obtener el spread real de Bitget
+    if (!queryFailed) {
+      try {
+        spreadBitget = await this.fetchBitgetSpread(symbol);
+        console.log(`[RiskManagerAgent] Spread real de Bitget obtenido para ${symbol}: ${(spreadBitget * 100).toFixed(4)}%`);
+      } catch (apiError) {
+        console.error('[RiskManagerAgent] Error al obtener el spread real de Bitget:', apiError);
+        queryFailed = true;
+        failureDetail = apiError instanceof Error ? apiError.message : String(apiError);
+      }
+    }
+
+    // 4. Manejo estricto de fallos en consultas críticas (Bloqueo Preventivo por Seguridad)
+    if (queryFailed) {
+      const rejection_reason = `No se pudo verificar el drawdown o el spread real — bloqueo preventivo de seguridad. Detalles: ${failureDetail}`;
+      this.bloquearPorSeguridad(symbol, timeframe, rejection_reason);
+      return;
+    }
+
+    try {
       const snapshot = this.blackboard.getSnapshot(symbol, timeframe);
-      const precioActual = snapshot.marketData?.value?.price || 68000;
+      const precioActual = snapshot.marketData?.value?.price;
+
+      if (!precioActual || isNaN(precioActual) || precioActual <= 0) {
+        const rejection_reason = 'No se pudo verificar el precio de mercado real';
+        this.bloquearPorSeguridad(symbol, timeframe, rejection_reason);
+        return;
+      }
 
       // Variables de auditoría interna
       let safe_to_operate = true;
@@ -89,11 +276,6 @@ export class RiskManagerAgent extends BaseAgent {
       let justificacion = 'Aprobación del firewall de riesgo completada.';
 
       // 1. Verificación de Parámetros Globales (Drawdown de Cuenta)
-      // Simulación determinista de drawdown actual de la cuenta para validar el guardián
-      // En producción, esto se calcularía de la suma de pérdidas y ganancias diarias de la tabla `trades`
-      const currentDailyDrawdownUSD = 120; // Supongamos $120 USD de Drawdown diario acumulado hoy
-      const currentTotalDrawdownUSD = 250; // Supongamos $250 USD de Drawdown acumulado histórico
-
       const dailyDrawdownPct = currentDailyDrawdownUSD / limits.accountSizeUSD;
       const totalDrawdownPct = currentTotalDrawdownUSD / limits.accountSizeUSD;
 
@@ -118,8 +300,6 @@ export class RiskManagerAgent extends BaseAgent {
         rejection_reason = `Volatilidad del Mercado Extrema. ATR Relativo: ${(atrVolatilidadInstantnea * 100).toFixed(2)}% supera el umbral de seguridad de ${(limits.maxAtrVolatility * 100).toFixed(2)}%. No es seguro colocar órdenes con spread flotante.`;
       }
 
-      // Spread estimado en Bitget para el par analizado (simulado)
-      const spreadBitget = 0.0004; // 0.04% Spread saludable
       if (safe_to_operate && spreadBitget > limits.maxBitgetSpread) {
         safe_to_operate = false;
         rejection_reason = `Spread del Exchange Elevado. Bitget spread actual: ${(spreadBitget * 100).toFixed(2)}% excede el límite de ${(limits.maxBitgetSpread * 100).toFixed(2)}% configurado en el firewall.`;
@@ -219,7 +399,8 @@ export class RiskManagerAgent extends BaseAgent {
         kelly_fraction,
         risk_reward_ratio,
         rejection_reason,
-        justificacionConsolidada: justificacion
+        justificacionConsolidada: justificacion,
+        dataSource: 'REAL_TIME_VERIFIED'
       };
 
       // 7. Escribir resultado síncronamente al Blackboard

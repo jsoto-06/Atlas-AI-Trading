@@ -32,6 +32,15 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiInstance;
 }
 
+// Estructura para el cacheo en memoria de noticias RSS para evitar saturación de peticiones externas
+interface NewsCache {
+  timestamp: number;
+  articulos: NewsArticle[];
+}
+
+const newsCacheMap: { [symbol: string]: NewsCache } = {};
+const CACHE_TTL_MS = 15 * 60 * 1000; // TTL de 15 minutos para la caché
+
 /**
  * Agente de Noticias Financieras (News Agent).
  * Ingiere feeds de noticias clave en tiempo real y utiliza Gemini para clasificar
@@ -42,67 +51,166 @@ export class NewsAgent extends BaseAgent {
   public readonly isFastLoop: boolean = false; // Agente Slow-Loop cognitivo (acceso a API / razonamiento)
 
   /**
-   * Simula la ingesta asíncrona de feeds de noticias de fuentes premium (Bloomberg, Reuters, CoinDesk)
-   * para el activo y temporalidad dados.
+   * Obtiene y parsea el feed RSS de Cointelegraph en tiempo real.
+   * Utiliza un sistema de caché en memoria y AbortController para control estricto de timeouts.
+   * Retorna un array vacío [] si ocurre un error, timeout o si no se pueden parsear noticias reales.
    */
-  private obtenerFeedsNoticias(simbolo: string): NewsArticle[] {
+  private async obtenerFeedsNoticias(simbolo: string): Promise<NewsArticle[]> {
     const ahora = Date.now();
-    const ticker = simbolo.split('/')[0] || 'BTC';
 
-    return [
-      {
-        id: `news_bloomberg_${ahora}_1`,
-        titulo: `La Reserva Federal insinúa recortes de tipos de interés para fin de año ante moderación de la inflación`,
-        fuente: 'Bloomberg',
-        contenido: `En el último simposio económico, miembros clave de la Fed sugirieron que si el IPC continúa retrocediendo al ritmo actual, la flexibilización monetaria comenzará antes de lo previsto. Esto reduce la presión sobre el dólar (DXY) y potencia los flujos hacia activos de riesgo como ${ticker}.`,
-        timestamp: ahora - 15 * 60 * 1000, // Hace 15 minutos
-      },
-      {
-        id: `news_reuters_${ahora}_2`,
-        titulo: `La SEC aprueba formalmente la cotización de múltiples ETFs de opciones basados en mercados al contado`,
-        fuente: 'Reuters',
-        contenido: `La Comisión de Bolsa y Valores de EE.UU. (SEC) dio luz verde definitiva a la negociación de derivados de opciones en exchanges tradicionales para los ETFs de ${ticker}. Analistas institucionales apuntan a un fuerte incremento de la liquidez de derivados y la entrada de fondos de cobertura sistémicos.`,
-        timestamp: ahora - 45 * 60 * 1000,
-      },
-      {
-        id: `news_coindesk_${ahora}_3`,
-        titulo: `Los flujos de reserva de los mineros de ${ticker} muestran fase de acumulación neta de largo plazo`,
-        fuente: 'CoinDesk',
-        contenido: `Datos de red muestran un drenaje histórico de las tenencias de exchanges, mientras los mineros y ballenas acumulan posiciones sin precedentes. La falta de oferta líquida podría exacerbar cualquier desequilibrio de la demanda.`,
-        timestamp: ahora - 120 * 60 * 1000,
-      },
-    ];
+    // 1. Intentar servir desde caché si está dentro del TTL
+    const cache = newsCacheMap[simbolo];
+    if (cache && (ahora - cache.timestamp) < CACHE_TTL_MS) {
+      console.log(`[NewsAgent] Utilizando artículos de noticias en caché para ${simbolo} (${Math.round((ahora - cache.timestamp) / 1000)}s de antigüedad).`);
+      return cache.articulos;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // Timeout de 6 segundos
+
+    try {
+      console.log('[NewsAgent] Intentando obtener noticias reales desde el RSS de Cointelegraph...');
+      const response = await fetch('https://cointelegraph.com/rss', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+        },
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error status: ${response.status}`);
+      }
+
+      const xml = await response.text();
+      const articulos: NewsArticle[] = [];
+      const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g);
+
+      if (itemMatches && itemMatches.length > 0) {
+        // Tomar hasta 5 artículos para no saturar la ventana de contexto de Gemini
+        const maxArticulos = Math.min(5, itemMatches.length);
+        for (let i = 0; i < maxArticulos; i++) {
+          const itemXml = itemMatches[i];
+          const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/);
+          const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/);
+          const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/);
+          const pubDateMatch = itemXml.match(/<pubDate>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/pubDate>/);
+
+          let title = titleMatch ? titleMatch[1].trim() : '';
+          let link = linkMatch ? linkMatch[1].trim() : '';
+          let description = descMatch ? descMatch[1].trim() : '';
+          const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : '';
+          const timestamp = pubDateStr ? new Date(pubDateStr).getTime() : ahora;
+
+          // Limpiar etiquetas HTML de la descripción
+          description = description.replace(/<\/?[^>]+(>|$)/g, "").trim();
+          // Decodificar entidades HTML comunes de manera simple
+          title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+          description = description.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+          if (!title) continue;
+
+          // Crear un ID determinista
+          const hashInput = link || title;
+          const id = `news_cointelegraph_${Buffer.from(hashInput).toString('base64').substring(0, 16)}`;
+
+          articulos.push({
+            id,
+            titulo: title,
+            fuente: 'Cointelegraph',
+            contenido: description || title,
+            timestamp: isNaN(timestamp) ? ahora : timestamp
+          });
+        }
+      }
+
+      if (articulos.length > 0) {
+        console.log(`[NewsAgent] Ingesta exitosa: ${articulos.length} artículos obtenidos de Cointelegraph.`);
+        // Guardar en caché para futuros ciclos
+        newsCacheMap[simbolo] = {
+          timestamp: ahora,
+          articulos: articulos
+        };
+        return articulos;
+      } else {
+        throw new Error('No se pudieron extraer artículos válidos del XML del RSS.');
+      }
+    } catch (error) {
+      console.warn('[NewsAgent] Error al obtener RSS real de noticias:', error);
+      // Retornar array vacío en caso de error o de no encontrar artículos reales (sin simulación ficticia)
+      return [];
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
-   * Genera un análisis determinista secundario si las APIs externas no están disponibles.
-   * Esto garantiza el principio de tolerancia a fallos absoluto.
+   * Genera un análisis determinista dinámico analizando el contenido real de los artículos.
+   * Esto garantiza el principio de resiliencia total frente a la indisponibilidad de la API de IA.
    */
   private ejecutarAnalisisFallback(articulos: NewsArticle[], simbolo: string, timeframe: string): NewsAnalystOutput {
-    console.log('[NewsAgent] Ejecutando análisis determinista local de noticias (Modo Fallback)...');
+    console.log('[NewsAgent] Ejecutando análisis determinista local de noticias reales (Modo Fallback)...');
     
-    const analizados = articulos.map((art, idx) => {
-      // Reglas heurísticas simples para el simulador local
-      let sentimiento: NewsSentimentType = 'NEUTRAL';
-      let impacto: NewsImpactType = 'MEDIUM';
-      let eventoMacro = 'NINGUNO';
-      let score = 0;
+    // Listas robustas de palabras clave para análisis dinámico de sentimiento y categorías
+    const keywordsBullish = [
+      'aprueba', 'etf', 'sube', 'alcista', 'bullish', 'crece', 'acumul', 'adopcion', 
+      'institucional', 'compra', 'rally', 'positivo', 'record', 'ganancia', 'verde', 
+      'lanzamiento', 'exito', 'inversion', 'breakout', 'soporte', 'recorte', 'reserva', 
+      'fed', 'sec', 'approve', 'bull', 'accumulation', 'growth', 'rising', 'positive', 
+      'success', 'support', 'pantera', 'hyperliquid', 'onchain', 'defi', 'rebound', 'rebote'
+    ];
 
-      if (art.contenido.toLowerCase().includes('fed') || art.contenido.toLowerCase().includes('tipos de interés')) {
+    const keywordsBearish = [
+      'rechaza', 'cae', 'bajista', 'bearish', 'caida', 'caída', 'perdida', 'pérdida', 'hack', 'estafa', 
+      'prohibe', 'demanda', 'investigacion', 'investigación', 'inflacion', 'inflación', 'quiebra', 'miedo', 'fud', 
+      'liquida', 'ventas', 'correccion', 'corrección', 'dump', 'scam', 'crash', 'ban', 'lawsuit', 
+      'sec investigation', 'negative', 'fear', 'liquidation', 'resistance', 'regul', 'hackeado', 'vulnerabilidad'
+    ];
+
+    const analizados = articulos.map((art) => {
+      const text = `${art.titulo} ${art.contenido}`.toLowerCase();
+      let matchBullish = 0;
+      let matchBearish = 0;
+
+      for (const kw of keywordsBullish) {
+        if (text.includes(kw)) matchBullish++;
+      }
+      for (const kw of keywordsBearish) {
+        if (text.includes(kw)) matchBearish++;
+      }
+
+      let sentimiento: NewsSentimentType = 'NEUTRAL';
+      let score = 0;
+      let confianza = 0.6;
+
+      if (matchBullish > matchBearish) {
         sentimiento = 'BULLISH';
-        impacto = 'HIGH';
+        score = Math.min(90, 20 + 15 * (matchBullish - matchBearish));
+        confianza = Math.min(0.85, 0.6 + 0.05 * (matchBullish - matchBearish));
+      } else if (matchBearish > matchBullish) {
+        sentimiento = 'BEARISH';
+        score = Math.max(-90, -20 - 15 * (matchBearish - matchBullish));
+        confianza = Math.min(0.85, 0.6 + 0.05 * (matchBearish - matchBullish));
+      } else {
+        sentimiento = 'NEUTRAL';
+        score = 0;
+        confianza = 0.5;
+      }
+
+      // Eventos Macro / Categorías
+      let eventoMacro = 'NINGUNO';
+      let impacto: NewsImpactType = 'LOW';
+
+      if (text.includes('fed') || text.includes('interest') || text.includes('interés') || text.includes('fomc') || text.includes('inflation') || text.includes('inflación') || text.includes('rate')) {
         eventoMacro = 'FED';
-        score = 80;
-      } else if (art.contenido.toLowerCase().includes('sec') || art.contenido.toLowerCase().includes('etf')) {
-        sentimiento = 'BULLISH';
         impacto = 'HIGH';
+      } else if (text.includes('sec') || text.includes('etf') || text.includes('etfs') || text.includes('regulation') || text.includes('regulación') || text.includes('gensler')) {
         eventoMacro = 'SEC';
-        score = 85;
-      } else if (art.contenido.toLowerCase().includes('acumulan') || art.contenido.toLowerCase().includes('drenaje')) {
-        sentimiento = 'BULLISH';
+        impacto = 'HIGH';
+      } else if (text.includes('hack') || text.includes('scam') || text.includes('exploit') || text.includes('seguridad') || text.includes('rob') || text.includes('vulnerabilidad')) {
+        eventoMacro = 'SECURITY';
         impacto = 'MEDIUM';
-        eventoMacro = 'NINGUNO';
-        score = 65;
+      } else if (matchBullish + matchBearish >= 3) {
+        impacto = 'MEDIUM';
       }
 
       return {
@@ -112,23 +220,66 @@ export class NewsAgent extends BaseAgent {
           impacto,
           eventoMacro,
           score,
-          confianza: 0.8,
-          justificacion: `Análisis heurístico determinista basado en patrones sintácticos locales.`
+          confianza,
+          justificacion: `Análisis heurístico determinista basado en patrones sintácticos locales. Coincidencias alcistas: ${matchBullish}, bajistas: ${matchBearish}.`
         }
       };
     });
+
+    // Consolidar métricas dinámicas de todos los artículos
+    const scoresValidos = analizados.map(a => a.analisis?.score ?? 0);
+    const scoreConsolidado = scoresValidos.length > 0 
+      ? Math.round(scoresValidos.reduce((a, b) => a + b, 0) / scoresValidos.length)
+      : 0;
+
+    let sentimientoConsolidado: NewsSentimentType = 'NEUTRAL';
+    if (scoreConsolidado > 15) {
+      sentimientoConsolidado = 'BULLISH';
+    } else if (scoreConsolidado < -15) {
+      sentimientoConsolidado = 'BEARISH';
+    }
+
+    const impactos = analizados.map(a => a.analisis?.impacto ?? 'LOW');
+    let impactoMacroEsperado: NewsImpactType = 'LOW';
+    if (impactos.includes('HIGH')) {
+      impactoMacroEsperado = 'HIGH';
+    } else if (impactos.includes('MEDIUM')) {
+      impactoMacroEsperado = 'MEDIUM';
+    }
+
+    const eventos = Array.from(new Set(
+      analizados
+        .map(a => a.analisis?.eventoMacro ?? 'NINGUNO')
+        .filter(ev => ev !== 'NINGUNO')
+    ));
+
+    const confianzas = analizados.map(a => a.analisis?.confianza ?? 0.5);
+    const confianzaConsolidada = confianzas.length > 0
+      ? Number((confianzas.reduce((a, b) => a + b, 0) / confianzas.length).toFixed(2))
+      : 0.6;
+
+    // Crear justificación detallada conteniendo fragmentos de titulares e información real procesada
+    let justificacionConsolidada = `Análisis local determinista finalizado sobre ${articulos.length} artículos de noticias frescas. `;
+    justificacionConsolidada += `Sentimiento consolidado estimado: ${sentimientoConsolidado} (Score: ${scoreConsolidado}). `;
+    if (eventos.length > 0) {
+      justificacionConsolidada += `Se detectaron eventos clave de tipo: ${eventos.join(', ')}. `;
+    }
+    justificacionConsolidada += `Los artículos describen dinámicas de mercado reales. Los titulares destacados incluyen: `;
+    justificacionConsolidada += articulos.map((a, i) => `[${i+1}] "${a.titulo}"`).join('; ');
+    justificacionConsolidada += `.`;
 
     return {
       simbolo,
       temporalidad: timeframe,
       timestamp: Date.now(),
       articulosProcesados: analizados,
-      sentimientoConsolidado: 'BULLISH',
-      impactoMacroEsperado: 'HIGH',
-      eventosMacroDetectados: ['FED', 'SEC'],
-      scoreConsolidado: 75,
-      confianza: 0.7,
-      justificacionConsolidada: 'Análisis determinista local completado. Las noticias son significativamente positivas debido a insinuaciones dovish de la FED y avances regulatorios de la SEC sobre opciones de ETFs.'
+      sentimientoConsolidado,
+      impactoMacroEsperado,
+      eventosMacroDetectados: eventos,
+      scoreConsolidado,
+      confianza: confianzaConsolidada,
+      justificacionConsolidada,
+      dataSource: 'LOCAL_FALLBACK_ON_REAL_HEADLINES'
     };
   }
 
@@ -138,10 +289,39 @@ export class NewsAgent extends BaseAgent {
   public async analyze(symbol: string, timeframe: string): Promise<void> {
     console.log(`[NewsAgent] Analizando feeds de noticias para ${symbol}:${timeframe}...`);
     
-    // Ingerir feeds
-    const articulos = this.obtenerFeedsNoticias(symbol);
-    let output: NewsAnalystOutput;
+    // Ingerir feeds reales
+    const articulos = await this.obtenerFeedsNoticias(symbol);
 
+    if (articulos.length === 0) {
+      console.warn(`[NewsAgent] No hay feeds de noticias reales disponibles para ${symbol}:${timeframe}. Grabando assessment UNAVAILABLE en Blackboard.`);
+      
+      const assessment: AgentAssessment = {
+        agentName: this.name,
+        timestamp: Date.now(),
+        score: 0,
+        confidence: 0.1,
+        data: {
+          simbolo: symbol,
+          temporalidad: timeframe,
+          timestamp: Date.now(),
+          articulosProcesados: [],
+          sentimientoConsolidado: 'NEUTRAL',
+          impactoMacroEsperado: 'LOW',
+          eventosMacroDetectados: [],
+          scoreConsolidado: 0,
+          confianza: 0.1,
+          justificacionConsolidada: 'Las fuentes de noticias de Cointelegraph no respondieron o no se pudieron procesar en este ciclo. No se puede generar un análisis sin fuentes de datos primarios.',
+          dataSource: 'UNAVAILABLE'
+        },
+        justification: 'Las fuentes de noticias de Cointelegraph no respondieron o no se pudieron procesar en este ciclo. No se puede generar un análisis sin fuentes de datos primarios.'
+      };
+
+      this.blackboard.writeAssessment(symbol, timeframe, assessment);
+      console.log(`[NewsAgent] Blackboard actualizado con éxito para ${symbol}:${timeframe} en modo UNAVAILABLE con score: 0`);
+      return;
+    }
+
+    let output: NewsAnalystOutput;
     const client = getGeminiClient();
 
     if (client) {
@@ -268,7 +448,8 @@ Reglas críticas de negocio:
           eventosMacroDetectados: data.eventosMacroDetectados,
           scoreConsolidado: Math.max(-100, Math.min(100, data.scoreConsolidado)),
           confianza: data.confianza,
-          justificacionConsolidada: data.justificacionConsolidada
+          justificacionConsolidada: data.justificacionConsolidada,
+          dataSource: 'GEMINI_ANALYSIS'
         };
 
         console.log('[NewsAgent] Análisis cognitivo de noticias de Gemini completado con éxito.');

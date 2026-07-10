@@ -19,6 +19,32 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
   const calculator = new MetricsCalculator();
 
   /**
+   * Middleware de autenticación simple para endpoints sensibles de administración y telemetría.
+   * Valida que el header Authorization sea un Bearer token que coincida con ADMIN_API_TOKEN.
+   * Fail-safe: si ADMIN_API_TOKEN no está configurado, bloquea todo acceso a estos recursos.
+   */
+  const adminAuthHook = async (request: any, reply: any) => {
+    const token = process.env.ADMIN_API_TOKEN;
+    if (!token || token.trim() === '') {
+      fastify.log.warn('ADMIN_API_TOKEN no está configurado en el entorno. Rechazando petición de forma preventiva (fail-safe).');
+      reply.status(401).send({ error: 'Unauthorized', message: 'Acceso denegado.' });
+      return;
+    }
+
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      reply.status(401).send({ error: 'Unauthorized', message: 'Acceso denegado.' });
+      return;
+    }
+
+    const providedToken = authHeader.substring(7).trim();
+    if (providedToken !== token.trim()) {
+      reply.status(401).send({ error: 'Unauthorized', message: 'Acceso denegado.' });
+      return;
+    }
+  };
+
+  /**
    * 1. GET /api/v1/telemetry/state
    * Retorna una instantánea filtrada por TTL de todo el Blackboard de memoria.
    */
@@ -291,7 +317,8 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
           }
         }
       }
-    }
+    },
+    preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
       return {
@@ -324,7 +351,8 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
           modoReal: { type: 'boolean' }
         }
       }
-    }
+    },
+    preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
       const { apiKey, apiSecret, passphrase, modoReal } = request.body as any;
@@ -375,7 +403,8 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
           }
         }
       }
-    }
+    },
+    preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
       const originalModo = process.env.BITGET_MODO_REAL;

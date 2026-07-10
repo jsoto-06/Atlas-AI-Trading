@@ -31,4 +31,11 @@ export interface OrderFlowAnalystOutput {
   scoreConsolidado: number; // -100 a +100 para la pizarra
   confianza: number; // 0.0 a 1.0
   justificacionConsolidada: string;
+  dataSource?: string;
+  fieldsSourced?: {
+    fundingRate: 'REAL' | 'DEFAULT';
+    bidSz: 'REAL' | 'DEFAULT';
+    askSz: 'REAL' | 'DEFAULT';
+    holdingAmount: 'REAL' | 'DEFAULT';
+  };
 }

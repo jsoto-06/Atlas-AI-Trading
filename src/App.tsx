@@ -302,7 +302,7 @@ export default function App() {
     News: {
       name: 'News',
       spanishName: 'Analista de Noticias',
-      description: 'Escanea Bloomberg, Reuters, CoinDesk y comunicados macroeconómicos para medir el impacto inmediato.',
+      description: 'Escanea el feed RSS de Cointelegraph para medir el impacto inmediato de noticias cripto.',
       isFastLoop: false,
       status: 'IDLE',
       score: 0,

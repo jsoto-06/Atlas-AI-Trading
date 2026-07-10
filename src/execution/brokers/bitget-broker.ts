@@ -6,6 +6,7 @@
 import crypto from 'crypto';
 import { BaseBroker } from './base-broker.ts';
 import { OrderRequest, ExecutionResult } from '../types.ts';
+import { mapSymbol, getProductType } from './bitget-utils.ts';
 
 /**
  * Adaptador de Corretaje Oficial para Bitget (BitgetBroker).
@@ -46,64 +47,14 @@ export class BitgetBroker extends BaseBroker {
    * Traduce un símbolo común como "BTC/USDT" al formato adecuado de Bitget (SBTCSUSDT para Demo o BTCUSDT para Real).
    */
   private mapSymbol(symbol: string): string {
-    const clean = symbol.replace('/', '').toUpperCase();
-    const isReal = process.env.BITGET_MODO_REAL === 'true';
-    if (isReal) {
-      if (clean.startsWith('S-')) {
-        return clean.substring(2);
-      }
-      if (clean.startsWith('S') && clean.endsWith('SUSDT') && clean.length > 6) {
-        const base = clean.substring(1, clean.length - 5);
-        return `${base}USDT`;
-      }
-      if (clean.startsWith('S') && clean.endsWith('SUSDC') && clean.length > 6) {
-        const base = clean.substring(1, clean.length - 5);
-        return `${base}USDC`;
-      }
-      return clean;
-    } else {
-      // Modo Demo (Simulado)
-      // Bitget utiliza el formato SBTCSUSDT para simulado (S + base + S + quote)
-      if (clean.endsWith('USDT')) {
-        const base = clean.substring(0, clean.length - 4);
-        if (clean.startsWith('S') && clean.endsWith('SUSDT') && clean.length > 6) {
-          return clean;
-        }
-        let normalizedBase = base;
-        if (base.startsWith('S-')) {
-          normalizedBase = base.substring(2);
-        } else if (base.startsWith('S') && base.length > 3) {
-          normalizedBase = base.substring(1);
-        }
-        return `S${normalizedBase}SUSDT`;
-      }
-      if (clean.endsWith('USDC')) {
-        const base = clean.substring(0, clean.length - 4);
-        if (clean.startsWith('S') && clean.endsWith('SUSDC') && clean.length > 6) {
-          return clean;
-        }
-        let normalizedBase = base;
-        if (base.startsWith('S-')) {
-          normalizedBase = base.substring(2);
-        } else if (base.startsWith('S') && base.length > 3) {
-          normalizedBase = base.substring(1);
-        }
-        return `S${normalizedBase}SUSDC`;
-      }
-      
-      // Fallback
-      if (!clean.startsWith('S-') && !clean.startsWith('S')) {
-        return `S-${clean}`;
-      }
-      return clean;
-    }
+    return mapSymbol(symbol);
   }
 
   /**
    * Retorna el tipo de producto adecuado según el entorno operativo (Real vs Demo).
    */
   private getProductType(): string {
-    return process.env.BITGET_MODO_REAL === 'true' ? 'USDT-FUTURES' : 'SUSDT-FUTURES';
+    return getProductType();
   }
 
   /**
