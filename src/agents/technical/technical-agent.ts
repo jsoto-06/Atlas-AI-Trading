@@ -318,13 +318,21 @@ export class TechnicalAnalystAgent extends BaseAgent {
   }
 
   private calcularVWAP(velas: Candle[]): { valor: number; precioRelativo: 'POR_ENCIMA' | 'POR_DEBAJO' | 'CRUZANDO' } {
+    if (velas.length === 0) return { valor: 0, precioRelativo: 'CRUZANDO' };
+
+    // FIX H06: Anclar el VWAP al inicio de la sesión del día UTC actual (00:00:00 UTC)
+    const latestTime = velas[velas.length - 1].time;
+    const sessionStartTime = new Date(latestTime).setUTCHours(0, 0, 0, 0);
+
     let sumaTpVol = 0;
     let sumaVol = 0;
 
     for (const v of velas) {
-      const typicalPrice = (v.high + v.low + v.close) / 3;
-      sumaTpVol += typicalPrice * v.volume;
-      sumaVol += v.volume;
+      if (v.time >= sessionStartTime) {
+        const typicalPrice = (v.high + v.low + v.close) / 3;
+        sumaTpVol += typicalPrice * v.volume;
+        sumaVol += v.volume;
+      }
     }
 
     const vwapVal = sumaVol > 0 ? sumaTpVol / sumaVol : velas[velas.length - 1].close;

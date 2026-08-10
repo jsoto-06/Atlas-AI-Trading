@@ -7,6 +7,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { EngineScheduler } from '../../core/engine-scheduler.ts';
 import { BacktestEngine } from '../../backtesting/engine.ts';
 import { OrderRouter } from '../../execution/order-router.ts';
+import { BitgetBroker } from '../../execution/brokers/bitget-broker.ts';
 import { Blackboard } from '../../core/blackboard.ts';
 
 /**
@@ -137,6 +138,33 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
         exitoso: false,
         error: 'Internal Server Error',
         message: `Error al despachar orden de prueba: ${error.message || error}`
+      });
+    }
+  });
+
+  /**
+   * POST /api/v1/engine/close-position
+   * Body: { symbol?: string }
+   * 
+   * Cierra de forma inmediata cualquier posición activa en Bitget (Demo/Real) para el símbolo.
+   */
+  fastify.post('/close-position', { preHandler: adminAuthHook }, async (request, reply) => {
+    try {
+      const body = (request.body as any) || {};
+      const symbol = body.symbol || 'BTC/USDT';
+      const broker = new BitgetBroker();
+      const result = await broker.closePosition(symbol);
+
+      return reply.status(result.exitoso ? 200 : 400).send({
+        exitoso: result.exitoso,
+        resultado: result
+      });
+    } catch (error: any) {
+      fastify.log.error(`Error en POST /engine/close-position: ${error.message}`);
+      return reply.status(500).send({
+        exitoso: false,
+        error: 'Internal Server Error',
+        message: `Error al cerrar posición en Bitget: ${error.message || error}`
       });
     }
   });

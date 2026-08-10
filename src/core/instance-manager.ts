@@ -163,10 +163,17 @@ export class InstanceManager {
   private startFastLoop(config: InstanceConfig): void {
     console.log(`[InstanceManager] [START] Lanzando Fast-Loop para la sub-instancia: ${config.instance_id}`);
 
+    const isTestOrSimulation = process.env.NODE_ENV === 'test' || process.env.PAPER_SIMULATION === 'true';
+
     // Simulación reactiva de un bucle cognitivo institucional ejecutando análisis cada 10 segundos
     const interval = setInterval(async () => {
       try {
-        const mockPrice = 60000 + (Math.random() - 0.5) * 1000; // precio sintético de telemetría
+        if (!isTestOrSimulation) {
+          console.warn(`[InstanceManager] Generación de datos sintéticos bloqueada en entorno real/producción para instancia ${config.instance_id}. [FAIL CLOSED]`);
+          return;
+        }
+
+        const mockPrice = 60000 + (Math.random() - 0.5) * 1000; // precio sintético de telemetría únicamente en TEST
         
         // 1. Escribir actualización de mercado en el Blackboard
         this.blackboard.writeMarketData(config.instance_id, config.timeframe, {

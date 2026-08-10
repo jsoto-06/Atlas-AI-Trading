@@ -215,6 +215,12 @@ export class Blackboard extends EventEmitter {
           prunedCount++;
         }
       }
+      
+      // FIX H09: Delete empty symbol keys from store Map when both market data and all assessments are expired
+      const isMarketDataExpired = state.marketData.ttl > 0 && (now - state.marketData.lastUpdated >= state.marketData.ttl);
+      if (Object.keys(state.assessments).length === 0 && isMarketDataExpired) {
+        this.store.delete(key);
+      }
     }
 
     if (prunedCount > 0) {

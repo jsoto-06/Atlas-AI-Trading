@@ -21,9 +21,7 @@ import { AgentAssessment } from '../types.ts';
 export class OrderRouter {
   private broker: BitgetBroker;
   private blackboard: Blackboard;
-
-  // Parámetro de apalancamiento implícito por defecto para el cálculo de margen (e.g. 5x)
-  private readonly APALANCAMIENTO_DEFECTO = 5;
+  private processedSignals: Set<string> = new Set(); // Idempotencia de señales
 
   constructor(broker?: BitgetBroker) {
     this.broker = broker || new BitgetBroker();
@@ -33,14 +31,24 @@ export class OrderRouter {
   /**
    * Procesa la señal de riesgo y, si las condiciones de firewall y balance son óptimas,
    * despacha la orden directamente a la API de Bitget a través de su broker.
-   * 
-   * @param riskOutput El informe de auditoría generado por el Agente Gestor de Riesgos.
-   * @returns El resultado definitivo de la ejecución (ExecutionResult).
    */
-  public async dispatchOrder(riskOutput: RiskManagerAnalystOutput): Promise<ExecutionResult> {
+  public async dispatchOrder(riskOutput: RiskManagerAnalystOutput, leverage: number = 10): Promise<ExecutionResult> {
     const { simbolo, temporalidad, safe_to_operate, max_position_size, calculated_stop_loss, calculated_take_profit, rejection_reason } = riskOutput;
 
-    console.log(`[OrderRouter] Evaluando despacho de orden para ${simbolo} en ${temporalidad}...`);
+    // Idempotencia: Crear identificador único de señal (simbolo:temporalidad:timestamp)
+    const signalId = `${simbolo}:${temporalidad}:${riskOutput.timestamp}`;
+    if (this.processedSignals.has(signalId)) {
+      console.warn(`[OrderRouter] Señal duplicada ignorada para idempotencia: ${signalId}`);
+      return {
+        exitoso: false,
+        mensajeRespuesta: `Despacho omitido por idempotencia (Señal ya procesada: ${signalId})`,
+        timestamp: Date.now(),
+        error: 'DUPLICATE_SIGNAL_IGNORED',
+        reintentosRealizados: 0
+      };
+    }
+
+    console.log(`[OrderRouter] Evaluando despacho de orden para ${simbolo} en ${temporalidad} con apalancamiento ${leverage}x...`);
 
     // 1. Validar el veredicto del Firewall de Riesgos (Risk Manager)
     if (!safe_to_operate) {
@@ -78,20 +86,23 @@ export class OrderRouter {
       console.log(`[OrderRouter] Verificando balance de margen disponible para USDT en Bitget...`);
       const balanceDisponibleUSDT = await this.broker.getBalance('USDT');
 
-      // Calcular el margen mínimo requerido asumiendo apalancamiento regulado
-      // Margen requerido = Tamaño de la posición / Apalancamiento
-      const margenRequerido = max_position_size / this.APALANCAMIENTO_DEFECTO;
+      // FIX C10: Utilizar apalancamiento dinámico de configuración en lugar de hardcodeado 5x
+      const apalancamientoActivo = Math.max(1, leverage);
+      const margenRequerido = max_position_size / apalancamientoActivo;
 
-      console.log(`[OrderRouter] Control de Margen: Balance USDT Disponible: $${balanceDisponibleUSDT.toLocaleString()} USD | Margen Requerido (con apalancamiento ${this.APALANCAMIENTO_DEFECTO}x): $${margenRequerido.toLocaleString()} USD`);
+      console.log(`[OrderRouter] Control de Margen: Balance USDT Disponible: $${balanceDisponibleUSDT.toLocaleString()} USD | Margen Requerido (con apalancamiento ${apalancamientoActivo}x): $${margenRequerido.toLocaleString()} USD`);
 
       if (balanceDisponibleUSDT < margenRequerido) {
-        const msgError = `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${max_position_size.toFixed(2)} USD).`;
+        const hasCreds = !!process.env.BITGET_API_KEY && !!process.env.BITGET_API_SECRET && !!process.env.BITGET_PASSPHRASE;
+        const msgError = hasCreds 
+          ? `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${max_position_size.toFixed(2)} USD).`
+          : `Credenciales de Bitget (API Key / Secret / Passphrase) no configuradas en el archivo .env o en el panel. Introduce tus claves de Bitget Demo (SUSDT) para ejecutar operaciones reales en la sandbox de Bitget.`;
         console.error(`[OrderRouter] ${msgError}`);
         return {
           exitoso: false,
           mensajeRespuesta: `Despacho abortado: ${msgError}`,
           timestamp: Date.now(),
-          error: 'INSUFFICIENT_MARGIN',
+          error: hasCreds ? 'INSUFFICIENT_MARGIN' : 'MISSING_BITGET_CREDENTIALS',
           reintentosRealizados: 0
         };
       }
@@ -115,6 +126,7 @@ export class OrderRouter {
 
       // Registrar resultado en la consola institucional de auditoría
       if (executionResult.exitoso) {
+        this.processedSignals.add(signalId);
         console.log(`[OrderRouter] ¡Ejecución EXITOSA en Bitget! ID Orden: ${executionResult.orderId} | Precio Ejecutado: ${executionResult.precioEjecutado} USD | Comisión cobrada: $${executionResult.comisionUSD} USD.`);
       } else {
         console.error(`[OrderRouter] Falla definitiva reportada por el broker al ejecutar la orden: ${executionResult.error}`);

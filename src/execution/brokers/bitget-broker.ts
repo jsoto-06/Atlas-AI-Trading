@@ -124,13 +124,18 @@ export class BitgetBroker extends BaseBroker {
 
   /**
    * Obtiene de forma pública el precio de mercado más reciente de un contrato de futuros de Bitget.
+   * FIX C04: Elimina fallbacks hardcodeados (BTC=68000). Si la API no responde, opera en FAIL CLOSED -> Lanza excepción.
    */
   public async getMarketPrice(symbol: string): Promise<number> {
+    const mappedSymbol = this.mapSymbol(symbol);
+    const productType = this.getProductType();
+    const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const productType = this.getProductType();
-      const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (response.ok) {
         const data = await response.json();
         if (data.code === '00000' && data.data && data.data.length > 0) {
@@ -140,11 +145,11 @@ export class BitgetBroker extends BaseBroker {
           }
         }
       }
-    } catch (e) {
-      // Ignorar fallas y continuar
+      throw new Error(`Respuesta inválida del servidor Bitget (HTTP ${response.status})`);
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      throw new Error(`[FAIL CLOSED] No fue posible obtener el precio de mercado real para ${symbol} en Bitget: ${e.message}`);
     }
-    // Precios de contingencia realistas
-    return symbol.includes('BTC') ? 68000 : symbol.includes('ETH') ? 3400 : 140;
   }
 
   /**
@@ -174,25 +179,58 @@ export class BitgetBroker extends BaseBroker {
 
       const clientOrderId = `cli_${Math.random().toString(36).substring(2, 12)}`;
 
-      // MODO UNILATERAL (One-Way) en Bitget V2:
-      // - marginMode: 'crossed' ES OBLIGATORIO (error 400172 sin él)
-      // - direction/tradeSide/posSide NO van: son solo para Hedge Mode (causan error 40774)
-      // - force:'gtc' solo para LIMIT orders. Para MARKET usar 'ioc' (Immediate or Cancel)
       const isMarketOrder = request.tipo.toLowerCase() === 'market';
-      const payload: Record<string, string | boolean> = {
-        symbol: mappedSymbol,
-        productType: this.getProductType(),
-        marginCoin: isReal ? 'USDT' : 'SUSDT',
-        marginMode: 'crossed',
-        size: formattedSize,
-        side: request.lado === 'BUY' ? 'buy' : 'sell',
-        orderType: request.tipo.toLowerCase(),
-        force: isMarketOrder ? 'ioc' : 'gtc',
-        clientOid: clientOrderId
-      };
+      const posSideVal = request.lado === 'BUY' ? 'long' : 'short';
+      
+      // Cadena de variaciones de payload para compatibilidad universal con Bitget V2 (Modo Unilateral vs Modo Cobertura/Hedge)
+      const variacionesPayload: Array<Record<string, string | boolean>> = [
+        // Variación 1: Modo Unilateral / One-Way (side: 'buy'/'sell', sin posSide ni tradeSide)
+        {
+          symbol: mappedSymbol,
+          productType: this.getProductType(),
+          marginCoin: isReal ? 'USDT' : 'SUSDT',
+          marginMode: 'crossed',
+          size: formattedSize,
+          side: request.lado === 'BUY' ? 'buy' : 'sell',
+          orderType: request.tipo.toLowerCase(),
+          force: isMarketOrder ? 'ioc' : 'gtc',
+          clientOid: clientOrderId
+        },
+        // Variación 2: Modo Cobertura / Hedge oficial Bitget V2 (posSide: 'long'/'short', tradeSide: 'open')
+        {
+          symbol: mappedSymbol,
+          productType: this.getProductType(),
+          marginCoin: isReal ? 'USDT' : 'SUSDT',
+          marginMode: 'crossed',
+          size: formattedSize,
+          side: request.lado === 'BUY' ? 'buy' : 'sell',
+          posSide: posSideVal,
+          tradeSide: 'open',
+          orderType: request.tipo.toLowerCase(),
+          force: isMarketOrder ? 'ioc' : 'gtc',
+          clientOid: clientOrderId
+        }
+      ];
 
-      console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Despachando payload en caliente:`, JSON.stringify(payload));
-      const res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payload);
+      let res: any = null;
+      let ultimoError: any = null;
+
+      for (let idx = 0; idx < variacionesPayload.length; idx++) {
+        const payloadActual = variacionesPayload[idx];
+        try {
+          console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Intentando variante de apertura ${idx + 1}/${variacionesPayload.length}:`, JSON.stringify(payloadActual));
+          res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payloadActual);
+          if (res) break; // ¡Éxito!
+        } catch (err: any) {
+          ultimoError = err;
+          console.warn(`[BitgetBroker] Variante de apertura ${idx + 1} rechazada (${err.message || err}). Conmutando variante...`);
+          continue;
+        }
+      }
+
+      if (!res) {
+        throw ultimoError || new Error('No se pudo determinar el formato de orden compatible con la cuenta de Bitget.');
+      }
 
       const orderId = res.orderId || res.orderNo || `bitget_ord_${Math.random().toString(36).substring(2, 10)}`;
       const priceExecuted = parseFloat(res.price || '0') || currentPrice;
@@ -266,7 +304,10 @@ export class BitgetBroker extends BaseBroker {
   /**
    * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
    */
-  public async getPosition(symbol: string): Promise<{ size: number; entryPrice: number; unrealizedPnl: number } | null> {
+  /**
+   * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
+   */
+  public async getPosition(symbol: string): Promise<{ size: number; entryPrice: number; unrealizedPnl: number; holdSide?: string; rawSymbol?: string; marginCoin?: string } | null> {
     try {
       const mappedSymbol = this.mapSymbol(symbol);
       const isReal = process.env.BITGET_MODO_REAL === 'true';
@@ -275,16 +316,26 @@ export class BitgetBroker extends BaseBroker {
       const positions = await this.sendRequest('GET', '/api/v2/mix/position/all-position', { productType: this.getProductType() });
       
       if (Array.isArray(positions)) {
-        const matched = positions.find((pos: any) => pos.symbol === mappedSymbol && parseFloat(pos.total || '0') > 0);
+        const matched = positions.find((pos: any) => {
+          const posSym = (pos.symbol || pos.instId || '').toUpperCase();
+          const targetSym = mappedSymbol.toUpperCase();
+          const isSymbolMatch = posSym === targetSym;
+          const isHold = parseFloat(pos.total || pos.holdAmount || pos.available || '0') > 0;
+          return isSymbolMatch && isHold;
+        });
         if (matched) {
-          const size = parseFloat(matched.total || '0');
-          const isShort = matched.holdSide === 'short';
+          const size = parseFloat(matched.total || matched.holdAmount || matched.available || '0');
+          const holdSideStr = (matched.holdSide || matched.posSide || 'long').toLowerCase();
+          const isShort = holdSideStr === 'short';
           const sizeSigned = isShort ? -size : size;
           
           return {
             size: sizeSigned,
-            entryPrice: parseFloat(matched.openPrice || '0'),
-            unrealizedPnl: parseFloat(matched.unrealizedPL || '0')
+            entryPrice: parseFloat(matched.openPrice || matched.entryPrice || matched.achievePrice || '0'),
+            unrealizedPnl: parseFloat(matched.upl || matched.unrealizedPL || '0'),
+            holdSide: holdSideStr,
+            rawSymbol: matched.symbol || matched.instId,
+            marginCoin: matched.marginCoin
           };
         }
       }
@@ -313,33 +364,82 @@ export class BitgetBroker extends BaseBroker {
       }
 
       const absSize = Math.abs(pos.size);
-      const sideClose = pos.size > 0 ? 'sell' : 'buy';
-      const mappedSymbol = this.mapSymbol(symbol);
+      const mappedSymbol = pos.rawSymbol || this.mapSymbol(symbol);
+      const isDemoSymbol = mappedSymbol.startsWith('S') && mappedSymbol.endsWith('SUSDT');
+      const targetMarginCoin = pos.marginCoin || (isDemoSymbol ? 'SUSDT' : 'USDT');
+      const targetProductType = isDemoSymbol ? 'SUSDT-FUTURES' : 'USDT-FUTURES';
+
+      const posSideVal = pos.size > 0 ? 'long' : 'short';
+      const sideVal = pos.size > 0 ? 'sell' : 'buy';
 
       const transaccionCierre = async (): Promise<ExecutionResult> => {
-        // MODO UNILATERAL (One-Way) en Bitget V2:
-        // - marginMode: 'crossed' ES OBLIGATORIO
-        // - reduceOnly: 'YES' asegura que solo cierra, no abre nueva posición inversa
-        const payload: Record<string, string | boolean> = {
-          symbol: mappedSymbol,
-          productType: this.getProductType(),
-          marginCoin: isReal ? 'USDT' : 'SUSDT',
-          marginMode: 'crossed',
-          size: absSize.toString(),
-          side: sideClose,
-          orderType: 'market',
-          force: 'ioc',
-          reduceOnly: 'YES'
-        };
+        const variacionesCierre: Array<Record<string, string | boolean>> = [
+          // Variante 1: Modo Unilateral / One-Way (side: 'buy'/'sell', reduceOnly: 'yes', sin posSide ni tradeSide)
+          {
+            symbol: mappedSymbol,
+            productType: targetProductType,
+            marginCoin: targetMarginCoin,
+            marginMode: 'crossed',
+            size: absSize.toString(),
+            side: sideVal,
+            orderType: 'market',
+            force: 'ioc',
+            reduceOnly: 'yes'
+          },
+          // Variante 2: Modo Cobertura / Hedge (side: 'buy'/'sell', posSide: 'long'/'short', tradeSide: 'close')
+          {
+            symbol: mappedSymbol,
+            productType: targetProductType,
+            marginCoin: targetMarginCoin,
+            marginMode: 'crossed',
+            size: absSize.toString(),
+            side: sideVal,
+            posSide: posSideVal,
+            tradeSide: 'close',
+            orderType: 'market',
+            force: 'ioc',
+            reduceOnly: 'yes'
+          }
+        ];
 
-        console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Enviando ORDEN DE CIERRE para ${mappedSymbol} (Tamaño: ${absSize})...`);
-        const res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payload);
+        console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Enviando ORDEN DE CIERRE para ${mappedSymbol} (Lado: ${posSideVal.toUpperCase()}, Tamaño: ${absSize}, Margen: ${targetMarginCoin})...`);
+        
+        let res: any = null;
+        let ultimoError: any = null;
+
+        for (let idx = 0; idx < variacionesCierre.length; idx++) {
+          const payloadActual = variacionesCierre[idx];
+          try {
+            console.log(`[BitgetBroker] Variante de cierre ${idx + 1}/${variacionesCierre.length}:`, JSON.stringify(payloadActual));
+            res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payloadActual);
+            if (res) break;
+          } catch (err: any) {
+            ultimoError = err;
+            console.warn(`[BitgetBroker] Variante de cierre ${idx + 1} rechazada (${err.message || err}). Conmutando a siguiente variante...`);
+            continue;
+          }
+        }
+
+        if (!res) {
+          const msgError = ultimoError?.message || '';
+          if (msgError.includes('22002') || msgError.includes('No position to close')) {
+            console.log('[BitgetBroker] La posición ya no existe en Bitget.');
+            return {
+              exitoso: true,
+              mensajeRespuesta: `La posición para ${mappedSymbol} ya se encuentra cerrada en Bitget.`,
+              timestamp: Date.now(),
+              reintentosRealizados: 0
+            };
+          }
+          throw ultimoError || new Error('No se pudo cerrar la posición en Bitget.');
+        }
 
         const orderId = res.orderId || res.orderNo || `close_${Math.random().toString(36).substring(2, 10)}`;
+        const sideCloseLabel = pos.size > 0 ? 'SELL' : 'BUY';
         return {
           exitoso: true,
           orderId,
-          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'}. Lado: ${sideClose.toUpperCase()}, Símbolo: ${mappedSymbol}.`,
+          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'}. Lado: ${sideCloseLabel}, Símbolo: ${mappedSymbol}.`,
           timestamp: Date.now(),
           reintentosRealizados: 0
         };

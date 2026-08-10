@@ -135,24 +135,29 @@ export class Orchestrator {
   ): Promise<void> {
     if (agents.length === 0) return;
 
-    // We execute all agents as independent promises
-    const agentPromises = agents.map(async (agent) => {
-      const agentStart = Date.now();
-      try {
-        await agent.execute(symbol, timeframe);
-      } catch (err) {
-        console.error(`Uncaught error in slow agent ${agent.name}:`, err);
-      }
-    });
-
-    // We race the parallel execution against our configured slow-loop timeout
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Slow-Loop agent pipeline exceeded threshold of ${this.slowLoopTimeout}ms.`));
-      }, this.slowLoopTimeout);
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, this.slowLoopTimeout);
 
     try {
+      const agentPromises = agents.map(async (agent) => {
+        if (controller.signal.aborted) return;
+        try {
+          await agent.execute(symbol, timeframe);
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error(`Uncaught error in slow agent ${agent.name}:`, err);
+          }
+        }
+      });
+
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          reject(new Error(`Slow-Loop agent pipeline exceeded threshold of ${this.slowLoopTimeout}ms.`));
+        });
+      });
+
       await Promise.race([
         Promise.all(agentPromises),
         timeoutPromise,
@@ -163,6 +168,8 @@ export class Orchestrator {
         'Orchestrator',
         `Slow-Loop warning or partial timeout: ${error instanceof Error ? error.message : String(error)}. Downstream logic will evaluate with available data.`
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

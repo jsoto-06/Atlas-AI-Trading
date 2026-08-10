@@ -31,7 +31,9 @@ export const blackboardSnapshots = pgTable('blackboard_snapshots', {
   timeframe: text('timeframe').notNull(), // e.g., "1m", "5m", "15m", "1h", "4h", "1D"
   data: jsonb('data').notNull(), // Raw blackboard state including all agent scores and assessments
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('blackboard_snapshots_symbol_timeframe_idx').on(table.symbol, table.timeframe, table.createdAt)
+]);
 
 // 4. Signals / Supervisor Decisions Table (Decisions made by the Supervisor Agent)
 export const supervisorDecisions = pgTable('supervisor_decisions', {
@@ -44,7 +46,9 @@ export const supervisorDecisions = pgTable('supervisor_decisions', {
   agentAssessments: jsonb('agent_assessments').notNull(), // Full break-down of agent inputs & weights
   status: text('status').default('PENDING_RISK').notNull(), // "PENDING_RISK", "APPROVED", "REJECTED_BY_RISK", "EXECUTED"
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('supervisor_decisions_symbol_timeframe_idx').on(table.symbol, table.timeframe, table.createdAt)
+]);
 
 // Relationships for Supervisor Decisions
 export const supervisorDecisionsRelations = relations(supervisorDecisions, ({ many }) => ({
@@ -75,7 +79,10 @@ export const trades = pgTable('trades', {
   entryTime: timestamp('entry_time').defaultNow().notNull(),
   exitTime: timestamp('exit_time'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('trades_user_status_idx').on(table.userId, table.status),
+  index('trades_symbol_status_idx').on(table.symbol, table.status)
+]);
 
 // Relationships for Trades Table
 export const tradesRelations = relations(trades, ({ one }) => ({
@@ -97,7 +104,10 @@ export const auditLogs = pgTable('audit_logs', {
   agentName: text('agent_name').notNull(), // e.g. "TechnicalAnalyst", "RiskManager", "Supervisor"
   message: text('message').notNull(),
   payload: jsonb('payload'), // Context data (prompts, responses, stats, errors)
-});
+}, (table) => [
+  index('audit_logs_timestamp_idx').on(table.timestamp),
+  index('audit_logs_agent_name_idx').on(table.agentName)
+]);
 
 // 7. Learning Performance Table (For the Learning Agent to optimize weights/params)
 export const learningPerformance = pgTable('learning_performance', {
@@ -112,15 +122,18 @@ export const learningPerformance = pgTable('learning_performance', {
 });
 
 // 8. Settings Table (Trading parameters, risk rules, and exchange API references)
+// FIXED C12: Composite unique index on (user_id, key) instead of global unique on key
 export const settings = pgTable('settings', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
     .references(() => users.id)
     .notNull(),
-  key: text('key').notNull().unique(), // e.g. "global_risk_limit", "kelly_multiplier"
+  key: text('key').notNull(), // e.g. "global_risk_limit", "kelly_multiplier"
   value: jsonb('value').notNull(), // Multi-valued risk settings in structured JSON
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('settings_user_key_idx').on(table.userId, table.key)
+]);
 
 // Relationships for Settings Table
 export const settingsRelations = relations(settings, ({ one }) => ({
@@ -141,7 +154,9 @@ export const marketCandles = pgTable('market_candles', {
   close: numeric('close', { precision: 20, scale: 8 }).notNull(),
   volume: numeric('volume', { precision: 20, scale: 8 }).notNull(),
   timestamp: timestamp('timestamp').notNull(),
-});
+}, (table) => [
+  index('market_candles_symbol_tf_ts_idx').on(table.symbol, table.timeframe, table.timestamp)
+]);
 
 // 10. Market Tickers Table (Historical ticker metrics including open interest)
 export const marketTickers = pgTable('market_tickers', {
@@ -154,5 +169,6 @@ export const marketTickers = pgTable('market_tickers', {
 }, (table) => [
   index('market_tickers_symbol_timestamp_idx').on(table.symbol, table.timestamp)
 ]);
+
 
 

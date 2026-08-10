@@ -407,34 +407,48 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
     preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
-      const originalModo = process.env.BITGET_MODO_REAL;
+      const isReal = process.env.BITGET_MODO_REAL === 'true';
       const broker = new BitgetBroker();
 
-      // Consultar Demo Balance
-      process.env.BITGET_MODO_REAL = 'false';
-      let demoBalance = 10000;
-      try {
-        demoBalance = await broker.getBalance('USDT');
-      } catch (e) {
-        fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Demo: ${e}`);
+      let demoBalance = 0;
+      let realBalance = 0;
+
+      if (!isReal) {
+        try {
+          demoBalance = await broker.getBalance('USDT');
+        } catch (e) {
+          fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Demo: ${e}`);
+        }
+      } else {
+        try {
+          realBalance = await broker.getBalance('USDT');
+        } catch (e) {
+          fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Real: ${e}`);
+        }
       }
 
-      // Consultar Real Balance
-      process.env.BITGET_MODO_REAL = 'true';
-      let realBalance = 10000;
+      // Consultar Posición Activa Real en el modo operativo activo
+      let bitgetPosition: any = null;
       try {
-        realBalance = await broker.getBalance('USDT');
+        const pos = await broker.getPosition('BTC/USDT');
+        if (pos && Math.abs(pos.size) > 0) {
+          bitgetPosition = {
+            symbol: 'BTC/USDT',
+            side: pos.size > 0 ? 'LONG' : 'SHORT',
+            quantity: Math.abs(pos.size),
+            entryPrice: pos.entryPrice,
+            unrealizedPnl: pos.unrealizedPnl
+          };
+        }
       } catch (e) {
-        fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Real: ${e}`);
+        // Silencioso
       }
-
-      // Restablecer el original
-      process.env.BITGET_MODO_REAL = originalModo;
 
       return {
         demo: demoBalance,
         real: realBalance,
-        activeMode: originalModo === 'true' ? 'real' : 'demo',
+        activeMode: isReal ? 'real' : 'demo',
+        position: bitgetPosition,
         timestamp: Date.now()
       };
     } catch (error: any) {
