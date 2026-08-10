@@ -283,5 +283,5 @@ docker-compose up -d --build
 Este proyecto está distribuido bajo la Licencia **Apache 2.0**. Consulta el archivo [LICENSE](LICENSE) para obtener más información.
 
 <div align="center">
-  <sub>Desarrollado con ❤️ para Trading Algorítmico Cuantitativo e Inteligencia Artificial.</sub>
+  <sub>Desarrollado con ❤️ Jonathan Soto para Trading Algorítmico Cuantitativo e Inteligencia Artificial.</sub>
 </div>
