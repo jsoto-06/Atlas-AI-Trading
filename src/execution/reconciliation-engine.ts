@@ -119,41 +119,49 @@ export class ReconciliationEngine {
           const precioEntrada = Number(tradeSeleccionado.entryPrice);
           const cantidad = Number(tradeSeleccionado.quantity);
           
-          // Calcular PnL Realizado
-          // LONG: PnL = (PrecioSalida - PrecioEntrada) * Cantidad
-          // SHORT: PnL = (PrecioEntrada - PrecioSalida) * Cantidad
+          // FIX C11: Distinguir Gross PnL vs Net PnL (descontando trading fees de entrada + salida)
+          // Bitget taker fee = 0.06% (0.0006)
+          const feeRate = 0.0006;
+          const feeEntradaUSD = precioEntrada * cantidad * feeRate;
+          const feeSalidaUSD = fillPrice * cantidad * feeRate;
+          const totalFeesUSD = feeEntradaUSD + feeSalidaUSD;
+
           const multiplicadorPnL = tradeSeleccionado.side === 'LONG' ? 1 : -1;
-          const pnlRealizado = (fillPrice - precioEntrada) * cantidad * multiplicadorPnL;
-          const pnlPct = precioEntrada > 0 ? ((fillPrice - precioEntrada) / precioEntrada) * 100 * multiplicadorPnL : 0;
+          const grossPnL = (fillPrice - precioEntrada) * cantidad * multiplicadorPnL;
+          const netPnL = grossPnL - totalFeesUSD;
+          const netPnlPct = (precioEntrada * cantidad) > 0 ? (netPnL / (precioEntrada * cantidad)) * 100 : 0;
 
-          // Actualizar trade a estado CLOSED
-          await db
-            .update(trades)
-            .set({
-              exitPrice: fillPrice.toString(),
-              status: 'CLOSED',
-              pnl: pnlRealizado.toString(),
-              pnlPercentage: pnlPct.toFixed(4),
-              exitTime: new Date(timestamp)
-            })
-            .where(eq(trades.id, tradeSeleccionado.id));
+          // FIX H05: Actualizar todos los trades abiertos coincidentes para este activo en lugar de solo uno
+          for (const trade of tradesActivos) {
+            await db
+              .update(trades)
+              .set({
+                exitPrice: fillPrice.toString(),
+                status: 'CLOSED',
+                pnl: netPnL.toString(),
+                pnlPercentage: netPnlPct.toFixed(4),
+                exitTime: new Date(timestamp)
+              })
+              .where(eq(trades.id, trade.id));
 
-          console.log(`[ReconciliationEngine] [CONCILIACIÓN] ¡Trade #${tradeSeleccionado.id} CERRADO exitosamente! PnL: $${pnlRealizado.toFixed(2)} USD (${pnlPct.toFixed(2)}%)`);
+            console.log(`[ReconciliationEngine] [CONCILIACIÓN] ¡Trade #${trade.id} CERRADO exitosamente! Gross PnL: $${grossPnL.toFixed(2)} USD | Net PnL (con fees): $${netPnL.toFixed(2)} USD (${netPnlPct.toFixed(2)}%)`);
+          }
 
           // Registrar telemetría del cierre y slippage
           await db.insert(auditLogs).values({
             agentName: 'Reconciliation',
             level: 'INFO',
-            message: `Trade #${tradeSeleccionado.id} cerrado con éxito en Bitget. Conciliado mediante WebSocket.`,
+            message: `Trades de ${symbol} cerrados con éxito en Bitget. Conciliados por WS.`,
             payload: {
-              tradeId: tradeSeleccionado.id,
-              orderId,
               symbol,
+              orderId,
               entryPrice: precioEntrada,
               exitPrice: fillPrice,
               slippagePct,
-              pnlRealizado,
-              pnlPct
+              grossPnL,
+              totalFeesUSD,
+              netPnL,
+              netPnlPct
             }
           });
 
@@ -262,6 +270,38 @@ export class ReconciliationEngine {
       }
     } catch (err) {
       console.error('[ReconciliationEngine] Error durante análisis de drift de posiciones:', err);
+    }
+  }
+
+  /**
+   * FIX C06: Ejecuta la reconciliación inicial obligatoria al arrancar la aplicación (Startup Reconciliation).
+   * Consulta el estado real del exchange (órdenes y posiciones) y lo sincroniza con la base de datos antes de activar el motor de trading.
+   */
+  public async reconcileOnStartup(broker: any, symbol: string = 'BTC/USDT'): Promise<boolean> {
+    console.log(`[ReconciliationEngine] [STARTUP RECOVERY] Iniciando reconciliación obligatoria de arranque para ${symbol}...`);
+    try {
+      const exchangePos = await broker.getPosition(symbol);
+      
+      const dbTrades = await db
+        .select()
+        .from(trades)
+        .where(and(eq(trades.symbol, symbol), eq(trades.status, 'OPEN')));
+
+      if (!exchangePos || Math.abs(exchangePos.size) === 0) {
+        if (dbTrades.length > 0) {
+          console.warn(`[ReconciliationEngine] [STARTUP RECOVERY] Encontrados ${dbTrades.length} trades OPEN en DB pero 0 posición en Bitget. Sincronizando estado a CLOSED.`);
+          for (const t of dbTrades) {
+            await db.update(trades).set({ status: 'CLOSED', exitTime: new Date() }).where(eq(trades.id, t.id));
+          }
+        }
+        console.log(`[ReconciliationEngine] [STARTUP RECOVERY] Sincronización completa: Sin posiciones abiertas en el exchange.`);
+      } else {
+        console.log(`[ReconciliationEngine] [STARTUP RECOVERY] Posición activa detectada en Bitget: ${exchangePos.holdSide?.toUpperCase()} ${Math.abs(exchangePos.size)} @ ${exchangePos.entryPrice} USD.`);
+      }
+      return true;
+    } catch (e: any) {
+      console.error(`[ReconciliationEngine] [STARTUP RECOVERY ERROR] Error en la reconciliación inicial de arranque:`, e.message);
+      return false;
     }
   }
 }

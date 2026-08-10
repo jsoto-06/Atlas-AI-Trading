@@ -332,15 +332,44 @@ export class RiskManagerAgent extends BaseAgent {
           }
 
           // 5. Dimensionamiento Científico de la Posición (Position Sizing)
-          // Implementamos el Criterio de Kelly (Quarter-Kelly para una gestión institucional conservadora)
-          // p = probabilidad de ganar (derivada de la confianza del Supervisor ajustada)
-          const p = Math.max(0.40, Math.min(0.85, confianzaSupervisor));
-          const b = risk_reward_ratio; // Pago por unidad de riesgo (2.25)
-          const q = 1 - p;
+          // FIX C03: Separar la confianza de la IA de la probabilidad empírica real.
+          // El Criterio de Kelly requiere la tasa de acierto HISTÓRICA EMPÍRICA (no la confianza del Supervisor).
+          let empiricalWinRate: number | null = null;
+          try {
+            if (userId !== null) {
+              const closedUserTrades = await db
+                .select()
+                .from(trades)
+                .where(and(eq(trades.status, 'CLOSED'), eq(trades.userId, userId)));
+              
+              if (closedUserTrades.length >= 20) { // Requerir mínimo 20 trades para significancia estadística
+                const winningTrades = closedUserTrades.filter(t => (t.pnl ? parseFloat(t.pnl) : 0) > 0);
+                empiricalWinRate = winningTrades.length / closedUserTrades.length;
+                console.log(`[RiskManagerAgent] Tasa de acierto empírica calculada en base a ${closedUserTrades.length} trades: ${(empiricalWinRate * 100).toFixed(2)}%`);
+              }
+            }
+          } catch (e) {
+            console.warn('[RiskManagerAgent] Error al consultar historial de trades para tasa de acierto empírica.');
+          }
 
-          const kellyRaw = p - (q / b);
-          // Aplicamos fracción conservadora de un cuarto (Quarter-Kelly) para neutralizar la varianza del mercado
-          kelly_fraction = Number((Math.max(0, kellyRaw) * 0.25).toFixed(4));
+          const HARD_MAX_RISK_FRACTION = 0.02; // Hard cap absoluto del 2% de riesgo por trade
+          const DEFAULT_CONSERVATIVE_RISK = 0.01; // Sizing conservador del 1% si no hay suficiente historial
+
+          if (empiricalWinRate !== null && empiricalWinRate > 0) {
+            const p = Math.max(0.35, Math.min(0.75, empiricalWinRate));
+            const b = risk_reward_ratio; // Ratio Riesgo:Beneficio (ej. 2.25)
+            const q = 1 - p;
+
+            const kellyRaw = p - (q / b);
+            // Fracción conservadora (Quarter-Kelly)
+            const quarterKelly = Math.max(0, kellyRaw) * 0.25;
+            // Aplicar Hard Cap al riesgo de Kelly
+            kelly_fraction = Number(Math.min(quarterKelly, HARD_MAX_RISK_FRACTION).toFixed(4));
+          } else {
+            // NO KELLY si no hay suficiente historial empírico. Usar sizing conservador predeterminado (1%).
+            kelly_fraction = DEFAULT_CONSERVATIVE_RISK;
+            console.log(`[RiskManagerAgent] Sin historial empírico suficiente (mínimo 20 trades). Desactivando Kelly y aplicando sizing conservador de ${(DEFAULT_CONSERVATIVE_RISK * 100)}%.`);
+          }
 
           // Cálculo del riesgo absoluto en dólares de la cuenta
           const riesgoMaxUSD = limits.accountSizeUSD * kelly_fraction;
@@ -349,13 +378,12 @@ export class RiskManagerAgent extends BaseAgent {
           const distanciaSLPct = distanciaSL / precioActual;
 
           // Tamaño máximo de la posición apalancada (en USD)
-          // Posición = Riesgo USD / Distancia SL %
           const maxPosicionUSD = distanciaSLPct > 0 ? (riesgoMaxUSD / distanciaSLPct) : 0;
           max_position_size = Number(maxPosicionUSD.toFixed(2));
 
           if (max_position_size <= 0 || kelly_fraction <= 0) {
             safe_to_operate = false;
-            rejection_reason = `La fracción de Kelly calculada es nula o negativa (${kelly_fraction}). Sugiere que la probabilidad de éxito no compensa la estructura de riesgo actual.`;
+            rejection_reason = `La fracción de riesgo calculada es nula o negativa (${kelly_fraction}). Operación no viable por riesgo.`;
           }
         }
       }

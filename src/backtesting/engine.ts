@@ -12,6 +12,7 @@ import { SupervisorAgent } from '../agents/supervisor/supervisor-agent.ts';
 import { BacktestConfig, BacktestResult, EquityPoint } from './types.ts';
 import { PerformanceReport } from '../analytics/types.ts';
 import { AgentAssessment } from '../types.ts';
+import { mapSymbol, getProductType } from '../execution/brokers/bitget-utils.ts';
 
 /**
  * Motor de Backtesting Dinámico e Histórico (BacktestEngine).
@@ -67,10 +68,9 @@ export class BacktestEngine {
       dbCandles = await this.fetchRealCandlesFromPublicApi(config.symbol, config.start_time, config.end_time);
     }
 
-    // Fallback defensivo final en caso de falta de conexión a internet
+    // FIX C02: FAIL CLOSED -> Si los datos de mercado son insuficientes, ABORTAR EL BACKTEST. Nunca generar datos con Math.random()
     if (dbCandles.length < 10) {
-      console.warn(`[BacktestEngine] Sin respuesta de red pública. Generando fallback sintético de contingencia...`);
-      dbCandles = this.generateSyntheticCandles(config);
+      throw new Error(`[BACKTEST FAILED: INSUFFICIENT MARKET DATA] No fue posible recuperar datos históricos suficientes (mínimo 10 velas) para ${config.symbol}. El backtest ha sido abortado.`);
     }
 
     console.log(`[BacktestEngine] Procesando ${dbCandles.length} velas históricas determinísticamente con TechnicalAnalyst + OrderFlow...`);
@@ -156,7 +156,9 @@ export class BacktestEngine {
 
         // Si se ejecutó la orden de salida
         if (closedThisCandle) {
-          const slippageAmount = exitPrice * (Math.random() * config.slippage_simulation_factor);
+          // FIX M04: Slippage determinista usando el factor configurado de simulación (sin Math.random())
+          const slippageFactor = config.slippage_simulation_factor || 0.0005; 
+          const slippageAmount = exitPrice * slippageFactor;
           if (side === 'LONG') {
             exitPrice -= slippageAmount; // Vende más barato
             pnl = (exitPrice - entryPrice) * quantity;
@@ -387,7 +389,8 @@ export class BacktestEngine {
             const finalSupervisorDecision = snapshot.assessments['Supervisor']?.value?.data?.final_decision || signal;
             if (finalSupervisorDecision === 'BUY' || finalSupervisorDecision === 'SELL') {
               let entryPriceSim = closePrice;
-              const slippageAmount = entryPriceSim * (Math.random() * config.slippage_simulation_factor);
+              const slippageFactor = config.slippage_simulation_factor || 0.0005;
+              const slippageAmount = entryPriceSim * slippageFactor;
               if (finalSupervisorDecision === 'BUY') {
                 entryPriceSim += slippageAmount;
               } else {
@@ -584,7 +587,8 @@ export class BacktestEngine {
     endTime: number
   ): Promise<any[]> {
     const cleanSymbol = symbol.replace('/', '');
-    const mappedBitgetSymbol = symbol.includes('BTC') ? 'BTCUSDT' : symbol.includes('ETH') ? 'ETHUSDT' : 'SOLUSDT';
+    const mappedBitgetSymbol = mapSymbol(symbol);
+    const productType = getProductType();
     
     const allCandlesMap = new Map<number, any>();
     
@@ -621,10 +625,10 @@ export class BacktestEngine {
         // Fallback a Bitget
       }
 
-      // 2. Intentar Bitget Public API si Binance no arrojó velas
+      // 2. Intentar Bitget Public API (Demo o Real según configuración) si Binance no arrojó velas
       if (batch.length === 0) {
         try {
-          const bitgetUrl = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedBitgetSymbol}&productType=USDT-FUTURES&granularity=15m&endTime=${currentEndTime}&limit=1000`;
+          const bitgetUrl = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedBitgetSymbol}&productType=${productType}&granularity=15m&endTime=${currentEndTime}&limit=1000`;
           const res = await fetch(bitgetUrl);
           if (res.ok) {
             const data = await res.json();

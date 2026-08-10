@@ -152,29 +152,41 @@ export class EngineScheduler {
   /**
    * Obtiene un ticker público de Bitget para construir el MarketStateSnapshot
    * que el Orchestrator necesita para iniciar el ciclo de agentes.
+   * FIX H03: Añadido AbortSignal.timeout(5000) para evitar colgado indeterminado en fetch
    */
   private async fetchMarketSnapshot(symbol: string): Promise<MarketStateSnapshot> {
-    const cleanSymbol = symbol.replace('/', '').toUpperCase();
-    const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${cleanSymbol}&productType=USDT-FUTURES`;
+    const mappedSymbol = mapSymbol(symbol);
+    const productType = getProductType();
+    const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Fallo HTTP obteniendo ticker de Bitget: ${response.status}`);
-    }
-    const json = await response.json();
-    if (json.code !== '00000' || !json.data || json.data.length === 0) {
-      throw new Error(`Respuesta inválida de ticker Bitget: ${json.msg || 'sin datos'}`);
-    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const t = json.data[0];
-    return {
-      symbol,
-      price: parseFloat(t.lastPr),
-      volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
-      high24h: parseFloat(t.high24h ?? t.lastPr),
-      low24h: parseFloat(t.low24h ?? t.lastPr),
-      timestamp: Date.now(),
-    };
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Fallo HTTP obteniendo ticker de Bitget: ${response.status}`);
+      }
+      const json = await response.json();
+      if (json.code !== '00000' || !json.data || json.data.length === 0) {
+        throw new Error(`Respuesta inválida de ticker Bitget: ${json.msg || 'sin datos'}`);
+      }
+
+      const t = json.data[0];
+      return {
+        symbol,
+        price: parseFloat(t.lastPr),
+        volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
+        high24h: parseFloat(t.high24h ?? t.lastPr),
+        low24h: parseFloat(t.low24h ?? t.lastPr),
+        timestamp: Date.now(),
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      throw new Error(`[FAIL CLOSED] Error al obtener snapshot de mercado para ${symbol}: ${err.message}`);
+    }
   }
 
   /**

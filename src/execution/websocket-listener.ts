@@ -83,10 +83,32 @@ export class BitgetWebSocketListener {
   }
 
   /**
+   * FIX H04: Elimina un callback registrado del canal de Órdenes.
+   */
+  public offOrderUpdate(callback: OrderCallback): void {
+    this.ordersCallbacks.delete(callback);
+  }
+
+  /**
    * Registra un callback para actualizaciones del canal de Posiciones.
    */
   public onPositionUpdate(callback: PositionCallback): void {
     this.positionsCallbacks.add(callback);
+  }
+
+  /**
+   * FIX H04: Elimina un callback registrado del canal de Posiciones.
+   */
+  public offPositionUpdate(callback: PositionCallback): void {
+    this.positionsCallbacks.delete(callback);
+  }
+
+  /**
+   * FIX H04: Limpia todos los callbacks registrados para evitar fugas de memoria al reconectar.
+   */
+  public clearAllCallbacks(): void {
+    this.ordersCallbacks.clear();
+    this.positionsCallbacks.clear();
   }
 
   /**

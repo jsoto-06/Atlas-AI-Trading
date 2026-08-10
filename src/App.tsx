@@ -124,6 +124,10 @@ export default function App() {
   // Real-time prices
   const [price, setPrice] = useState<number>(68420.50);
   const [priceDirection, setPriceDirection] = useState<'UP' | 'DOWN' | 'NEUTRAL'>('NEUTRAL');
+  const priceRef = useRef(price);
+  useEffect(() => {
+    priceRef.current = price;
+  }, [price]);
 
   // Active Simulated Position (Paper Trading / Exchange status)
   const [activePosition, setActivePosition] = useState<{
@@ -230,7 +234,7 @@ export default function App() {
   const [apiConfigMessage, setApiConfigMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Token de Administrador (Authorization: Bearer <ADMIN_API_TOKEN>)
-  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem('ADMIN_API_TOKEN') || 'mi_clave_super_segura_123');
+  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem('ADMIN_API_TOKEN') || '');
   const [showAdminToken, setShowAdminToken] = useState(false);
 
   // API Config visibility states
@@ -260,6 +264,35 @@ export default function App() {
           real: typeof data.real === 'number' ? data.real : null,
           activeMode: data.activeMode || 'demo'
         } as any);
+
+        // Sincronizar automáticamente la posición activa real directamente desde Bitget Exchange
+        if (data.position && data.position.symbol) {
+          const p = data.position;
+          const offset = priceRef.current * 0.02;
+          setActivePosition(prev => {
+            const curPrice = priceRef.current > 0 ? priceRef.current : p.entryPrice;
+            const diff = curPrice - p.entryPrice;
+            const mult = p.side === 'LONG' ? 1 : -1;
+            const lev = p.leverage || 10;
+            const calcPnl = Number((diff * p.quantity * mult).toFixed(2));
+            const calcPnlPct = p.entryPrice > 0 ? Number(((diff / p.entryPrice) * 100 * lev * mult).toFixed(2)) : 0;
+
+            return {
+              symbol: p.symbol,
+              side: p.side,
+              entryPrice: p.entryPrice,
+              currentPrice: curPrice,
+              quantity: p.quantity,
+              leverage: lev,
+              pnl: calcPnl,
+              pnlPercentage: calcPnlPct,
+              stopLoss: prev?.stopLoss || Number((p.side === 'LONG' ? p.entryPrice - offset : p.entryPrice + offset).toFixed(2)),
+              takeProfit: prev?.takeProfit || Number((p.side === 'LONG' ? p.entryPrice + offset * 2.2 : p.entryPrice - offset * 2.2).toFixed(2))
+            };
+          });
+        } else if (data.position === null) {
+          setActivePosition(null);
+        }
       } else if (res.status === 401) {
         console.warn('Unauthorized balances query: Token de Administrador inválido.');
       }
@@ -585,7 +618,31 @@ export default function App() {
   // ----------------------------------------------------------------------------
   // Helper to fetch real-time prices from Binance API
   // ----------------------------------------------------------------------------
+  // ----------------------------------------------------------------------------
+  // Helper para obtener precio en tiempo real directamente desde Bitget V2 API
+  // ----------------------------------------------------------------------------
   const fetchRealPrice = async (currentSymbol: string): Promise<number | null> => {
+    try {
+      const clean = currentSymbol.replace('/', '').toUpperCase();
+      const isReal = apiConfig.modoReal;
+      const bitgetSymbol = isReal ? clean : (clean.endsWith('USDT') ? `S${clean.substring(0, clean.length - 4)}SUSDT` : clean);
+      const productType = isReal ? 'USDT-FUTURES' : 'SUSDT-FUTURES';
+      
+      const response = await fetch(`https://api.bitget.com/api/v2/mix/market/ticker?symbol=${bitgetSymbol}&productType=${productType}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === '00000' && data.data && data.data.length > 0) {
+          const realPrice = parseFloat(data.data[0].lastPr);
+          if (!isNaN(realPrice) && realPrice > 0) {
+            return realPrice;
+          }
+        }
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    // Fallback a Binance si la consulta directa tarda
     try {
       const binanceSymbol = currentSymbol.replace('/', '');
       const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`);
@@ -603,7 +660,7 @@ export default function App() {
   };
 
   // ----------------------------------------------------------------------------
-  // Live Price Ticker - Real Price Polling with Simulation Fallback
+  // Live Price Ticker - Transmisión en Tiempo Real Ultra-Rápida (600ms)
   // ----------------------------------------------------------------------------
   useEffect(() => {
     let active = true;
@@ -628,13 +685,13 @@ export default function App() {
 
         setPriceDirection(change > 0 ? 'UP' : change < 0 ? 'DOWN' : 'NEUTRAL');
         
-        // Update active position in real-time
+        // Actualizar posición activa y PnL en tiempo real
         if (activePosition) {
           setActivePosition(prev => {
             if (!prev) return null;
             const diff = nextPrice - prev.entryPrice;
             const multiplier = prev.side === 'LONG' ? 1 : -1;
-            const pnl = Number((diff * prev.quantity * prev.leverage * multiplier).toFixed(2));
+            const pnl = Number((diff * prev.quantity * multiplier).toFixed(2));
             const pnlPercentage = Number(((diff / prev.entryPrice) * 100 * prev.leverage * multiplier).toFixed(2));
             
             // Check stop loss / take profit triggers
@@ -666,13 +723,13 @@ export default function App() {
         
         return nextPrice;
       });
-    }, 3000);
+    }, 600);
 
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [symbol, activePosition]);
+  }, [symbol, activePosition, apiConfig.modoReal]);
 
   // Adjust default values and load initial real price on symbol change
   useEffect(() => {
@@ -1233,10 +1290,33 @@ export default function App() {
     }
   };
 
-  // Safe reset of variables and position simulation
-  const handleResetPosition = () => {
-    setActivePosition(null);
-    addLog('INFO', 'RiskManager', 'Posición activa cerrada manualmente. Volviendo a modo de liquidez 100%.');
+  // Cierre de posición activa en Bitget Demo / Real
+  const handleResetPosition = async () => {
+    addLog('INFO', 'Execution', `Iniciando orden de cierre de posición para ${symbol} en Bitget...`);
+    if (adminToken) {
+      try {
+        const res = await fetch('/api/v1/engine/close-position', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`
+          },
+          body: JSON.stringify({ symbol })
+        });
+        const data = await res.json();
+        if (data.exitoso) {
+          addLog('INFO', 'Execution', `¡POSICIÓN CERRADA EXITOSAMENTE EN BITGET! ${data.resultado?.mensajeRespuesta || ''}`);
+          setActivePosition(null);
+        } else {
+          addLog('WARN', 'Execution', `Respuesta del broker al cerrar: ${data.resultado?.mensajeRespuesta || data.message || 'Fallo al cerrar'}`);
+        }
+      } catch (err: any) {
+        addLog('ERROR', 'Execution', `Fallo al conectar con el backend para cerrar posición: ${err.message || err}`);
+      }
+    } else {
+      setActivePosition(null);
+      addLog('INFO', 'RiskManager', 'Posición activa cerrada en memoria local. (Configura Token de Administrador para enviar orden de cierre a Bitget).');
+    }
   };
 
   const handlePlaceManualOrder = async (side: 'LONG' | 'SHORT') => {
