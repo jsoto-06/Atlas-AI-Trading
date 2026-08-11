@@ -20,9 +20,19 @@ import { eq, and, desc } from 'drizzle-orm';
  * 3. Registra detalladamente métricas de deslizamiento y telemetría en la bitácora institucional `auditLogs`.
  */
 export class ReconciliationEngine {
+  private static instance: ReconciliationEngine | null = null;
   private listener: BitgetWebSocketListener;
 
+  public static getInstance(listener?: BitgetWebSocketListener): ReconciliationEngine {
+    if (!ReconciliationEngine.instance) {
+      const wsListener = listener || BitgetWebSocketListener.getInstance();
+      ReconciliationEngine.instance = new ReconciliationEngine(wsListener);
+    }
+    return ReconciliationEngine.instance;
+  }
+
   constructor(listener: BitgetWebSocketListener) {
+
     this.listener = listener;
     this.inicializarSuscripciones();
   }
@@ -281,17 +291,23 @@ export class ReconciliationEngine {
     console.log(`[ReconciliationEngine] [STARTUP RECOVERY] Iniciando reconciliación obligatoria de arranque para ${symbol}...`);
     try {
       const exchangePos = await broker.getPosition(symbol);
-      
-      const dbTrades = await db
-        .select()
-        .from(trades)
-        .where(and(eq(trades.symbol, symbol), eq(trades.status, 'OPEN')));
+      let dbTrades: any[] = [];
+      try {
+        dbTrades = await db
+          .select()
+          .from(trades)
+          .where(and(eq(trades.symbol, symbol), eq(trades.status, 'OPEN')));
+      } catch (dbErr: any) {
+        console.warn(`[ReconciliationEngine] [STARTUP RECOVERY] Base de datos no disponible localmente para consulta de trades: ${dbErr.message || dbErr}`);
+      }
 
       if (!exchangePos || Math.abs(exchangePos.size) === 0) {
         if (dbTrades.length > 0) {
           console.warn(`[ReconciliationEngine] [STARTUP RECOVERY] Encontrados ${dbTrades.length} trades OPEN en DB pero 0 posición en Bitget. Sincronizando estado a CLOSED.`);
           for (const t of dbTrades) {
-            await db.update(trades).set({ status: 'CLOSED', exitTime: new Date() }).where(eq(trades.id, t.id));
+            try {
+              await db.update(trades).set({ status: 'CLOSED', exitTime: new Date() }).where(eq(trades.id, t.id));
+            } catch (uErr) {}
           }
         }
         console.log(`[ReconciliationEngine] [STARTUP RECOVERY] Sincronización completa: Sin posiciones abiertas en el exchange.`);
@@ -304,4 +320,5 @@ export class ReconciliationEngine {
       return false;
     }
   }
+
 }

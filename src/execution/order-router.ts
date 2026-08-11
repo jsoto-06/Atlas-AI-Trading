@@ -5,9 +5,9 @@
 
 import { RiskManagerAnalystOutput } from '../agents/risk/types.ts';
 import { BitgetBroker } from './brokers/bitget-broker.ts';
-import { OrderRequest, ExecutionResult, OrderSide, OrderType } from './types.ts';
+import { OrderManager } from './order-manager.ts';
+import { OrderRequest, ExecutionResult, OrderSide } from './types.ts';
 import { Blackboard } from '../core/blackboard.ts';
-import { AgentAssessment } from '../types.ts';
 
 /**
  * Enrutador de Órdenes Centralizado (OrderRouter).
@@ -15,56 +15,96 @@ import { AgentAssessment } from '../types.ts';
  * Actúa como el cerebro del Fast-Loop de ejecución del sistema reactivo.
  * Su responsabilidad consiste en recibir los informes validados por el firewall de riesgos
  * (RiskManagerAnalystOutput), verificar el balance disponible en el broker (BitgetBroker),
- * realizar el mapeo inmutable a un contrato de orden (OrderRequest) y despacharla de forma
- * segura, previniendo deslizamientos extremos o sobre-apalancamientos destructivos.
+ * realizar el mapeo inmutable a un contrato de orden (OrderRequest) y despacharla a través
+ * del OrderManager con garantía estricta de idempotencia, clientOid persistido en DB
+ * y sincronización de apalancamiento en el exchange.
  */
 export class OrderRouter {
   private broker: BitgetBroker;
+  private orderManager: OrderManager;
   private blackboard: Blackboard;
-  private processedSignals: Set<string> = new Set(); // Idempotencia de señales
+  private processedSignals: Set<string> = new Set(); // Cache de idempotencia rápida en memoria
+  private symbolLocks: Map<string, Promise<void>> = new Map(); // Locks por símbolo para prevenir concurrencia
 
-  constructor(broker?: BitgetBroker) {
+  constructor(broker?: BitgetBroker, orderManager?: OrderManager) {
     this.broker = broker || new BitgetBroker();
+    this.orderManager = orderManager || new OrderManager(this.broker);
     this.blackboard = Blackboard.getInstance();
   }
 
   /**
-   * Procesa la señal de riesgo y, si las condiciones de firewall y balance son óptimas,
-   * despacha la orden directamente a la API de Bitget a través de su broker.
+   * Obtiene la instancia del OrderManager asociado.
    */
-  public async dispatchOrder(riskOutput: RiskManagerAnalystOutput, leverage: number = 10): Promise<ExecutionResult> {
+  public getOrderManager(): OrderManager {
+    return this.orderManager;
+  }
+
+  /**
+   * Procesa la señal de riesgo y, si las condiciones de firewall, kill-switch y balance son óptimas,
+   * despacha la orden de forma totalmente idempotente hacia el exchange.
+   */
+  public async dispatchOrder(
+    riskOutput: RiskManagerAnalystOutput,
+    leverage: number = 10,
+    cycleId: string = `cycle_${Date.now()}`
+  ): Promise<ExecutionResult> {
     const { simbolo, temporalidad, safe_to_operate, max_position_size, calculated_stop_loss, calculated_take_profit, rejection_reason } = riskOutput;
 
-    // Idempotencia: Crear identificador único de señal (simbolo:temporalidad:timestamp)
-    const signalId = `${simbolo}:${temporalidad}:${riskOutput.timestamp}`;
-    if (this.processedSignals.has(signalId)) {
-      console.warn(`[OrderRouter] Señal duplicada ignorada para idempotencia: ${signalId}`);
+    // 0. VERIFICACIÓN DE KILL SWITCH DE EMERGENCIA
+    if (process.env.KILL_SWITCH === 'true') {
+      console.warn(`[OrderRouter] [KILL SWITCH ACTIVO] Bloqueando despacho de orden para ${simbolo}.`);
       return {
         exitoso: false,
-        mensajeRespuesta: `Despacho omitido por idempotencia (Señal ya procesada: ${signalId})`,
+        mensajeRespuesta: 'Operación abortada: KILL SWITCH global activo.',
         timestamp: Date.now(),
-        error: 'DUPLICATE_SIGNAL_IGNORED',
+        error: 'KILL_SWITCH_ACTIVE',
         reintentosRealizados: 0
       };
     }
 
-    console.log(`[OrderRouter] Evaluando despacho de orden para ${simbolo} en ${temporalidad} con apalancamiento ${leverage}x...`);
-
-    // 1. Validar el veredicto del Firewall de Riesgos (Risk Manager)
-    if (!safe_to_operate) {
-      const razon = rejection_reason || 'Rechazado por filtros preventivos del Gestor de Riesgos.';
-      console.warn(`[OrderRouter] Operación bloqueada por el Firewall de Riesgos. Razón: ${razon}`);
-      return {
-        exitoso: false,
-        mensajeRespuesta: `Despacho abortado: ${razon}`,
-        timestamp: Date.now(),
-        error: 'BLOCKED_BY_RISK_MANAGER',
-        reintentosRealizados: 0
-      };
+    // 1. Mutex / Lock por Símbolo para prevenir despachos concurrentes simultáneos
+    while (this.symbolLocks.has(simbolo)) {
+      console.log(`[OrderRouter] Esperando liberación de lock de despacho para ${simbolo}...`);
+      await this.symbolLocks.get(simbolo);
     }
+
+    let releaseLock: () => void = () => {};
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    this.symbolLocks.set(simbolo, lockPromise);
 
     try {
-      // 2. Recuperar la decisión de dirección desde el Blackboard (BUY o SELL)
+      // 2. Idempotencia Estricta: Registro de señal ANTES de iniciar despacho
+      const signalId = `${simbolo}:${temporalidad}:${riskOutput.timestamp}`;
+      if (this.processedSignals.has(signalId)) {
+        console.warn(`[OrderRouter] [IDEMPOTENCIA] Señal duplicada ignorada antes del despacho: ${signalId}`);
+        return {
+          exitoso: false,
+          mensajeRespuesta: `Despacho omitido por idempotencia (Señal ya procesada: ${signalId})`,
+          timestamp: Date.now(),
+          error: 'DUPLICATE_SIGNAL_IGNORED',
+          reintentosRealizados: 0
+        };
+      }
+
+      // Registrar la señal como en proceso para bloquear peticiones paralelas inmediatas
+      this.processedSignals.add(signalId);
+
+      // 3. Validar el veredicto del Firewall de Riesgos (Risk Manager)
+      if (!safe_to_operate) {
+        const razon = rejection_reason || 'Rechazado por filtros preventivos del Gestor de Riesgos.';
+        console.warn(`[OrderRouter] Operación bloqueada por el Firewall de Riesgos. Razón: ${razon}`);
+        return {
+          exitoso: false,
+          mensajeRespuesta: `Despacho abortado: ${razon}`,
+          timestamp: Date.now(),
+          error: 'BLOCKED_BY_RISK_MANAGER',
+          reintentosRealizados: 0
+        };
+      }
+
+      // 4. Recuperar la decisión de dirección desde el Blackboard (BUY o SELL)
       const snapshot = this.blackboard.getSnapshot(simbolo, temporalidad);
       const supervisorAssessment = snapshot.assessments['Supervisor'];
       
@@ -82,11 +122,10 @@ export class OrderRouter {
 
       const ladoOrden: OrderSide = decisionSupervisor as OrderSide;
 
-      // 3. Consultar y verificar el balance de colateral disponible en Bitget
+      // 5. Consultar y verificar el balance de colateral disponible en Bitget
       console.log(`[OrderRouter] Verificando balance de margen disponible para USDT en Bitget...`);
       const balanceDisponibleUSDT = await this.broker.getBalance('USDT');
 
-      // FIX C10: Utilizar apalancamiento dinámico de configuración en lugar de hardcodeado 5x
       const apalancamientoActivo = Math.max(1, leverage);
       const margenRequerido = max_position_size / apalancamientoActivo;
 
@@ -96,7 +135,7 @@ export class OrderRouter {
         const hasCreds = !!process.env.BITGET_API_KEY && !!process.env.BITGET_API_SECRET && !!process.env.BITGET_PASSPHRASE;
         const msgError = hasCreds 
           ? `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${max_position_size.toFixed(2)} USD).`
-          : `Credenciales de Bitget (API Key / Secret / Passphrase) no configuradas en el archivo .env o en el panel. Introduce tus claves de Bitget Demo (SUSDT) para ejecutar operaciones reales en la sandbox de Bitget.`;
+          : `Credenciales de Bitget (API Key / Secret / Passphrase) no configuradas en el entorno. Introduce tus claves de Bitget Demo para operar.`;
         console.error(`[OrderRouter] ${msgError}`);
         return {
           exitoso: false,
@@ -107,43 +146,45 @@ export class OrderRouter {
         };
       }
 
-      // 4. Mapeo Inmutable de Contrato de Orden (OrderRequest)
+      // 6. Mapeo Inmutable de Contrato de Orden (OrderRequest)
       const orderRequest: OrderRequest = {
         simbolo,
         temporalidad,
         lado: ladoOrden,
-        tipo: 'MARKET', // Entrada ágil a mercado para asegurar llenado instantáneo
+        tipo: 'MARKET',
         tamano: max_position_size,
         stopLoss: calculated_stop_loss,
         takeProfit: calculated_take_profit,
+        leverage: apalancamientoActivo,
         timestamp: Date.now()
       };
 
-      console.log(`[OrderRouter] Despachando OrderRequest mapeado de forma asíncrona hacia BitgetBroker:`, JSON.stringify(orderRequest, null, 2));
+      console.log(`[OrderRouter] Despachando a OrderManager [signalId: ${signalId}, cycleId: ${cycleId}]...`);
 
-      // 5. Despachar a través del Broker oficial con su envoltura de reintentos con backoff
-      const executionResult = await this.broker.executeOrder(orderRequest);
+      // 7. Enrutar obligatoriamente a través de OrderManager con clientOid persistido en DB
+      const executionResult = await this.orderManager.submitOrder(orderRequest, signalId, cycleId, apalancamientoActivo);
 
-      // Registrar resultado en la consola institucional de auditoría
       if (executionResult.exitoso) {
-        this.processedSignals.add(signalId);
-        console.log(`[OrderRouter] ¡Ejecución EXITOSA en Bitget! ID Orden: ${executionResult.orderId} | Precio Ejecutado: ${executionResult.precioEjecutado} USD | Comisión cobrada: $${executionResult.comisionUSD} USD.`);
+        console.log(`[OrderRouter] ¡Ejecución EXITOSA! OrderID: ${executionResult.orderId} | ClientOid: ${executionResult.clientOrderId}`);
       } else {
-        console.error(`[OrderRouter] Falla definitiva reportada por el broker al ejecutar la orden: ${executionResult.error}`);
+        console.error(`[OrderRouter] Resultado de despacho fallido: ${executionResult.error}`);
       }
 
       return executionResult;
 
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
-      console.error(`[OrderRouter] Error inesperado en el proceso de enrutamiento y despacho de orden:`, errorMsg);
+      console.error(`[OrderRouter] Error inesperado en el proceso de enrutamiento:`, errorMsg);
       return {
         exitoso: false,
-        mensajeRespuesta: `Error crítico e inesperado en OrderRouter: ${errorMsg}`,
+        mensajeRespuesta: `Error crítico en OrderRouter: ${errorMsg}`,
         timestamp: Date.now(),
         error: 'CRITICAL_ROUTER_EXCEPTION',
         reintentosRealizados: 0
       };
+    } finally {
+      this.symbolLocks.delete(simbolo);
+      releaseLock();
     }
   }
 }

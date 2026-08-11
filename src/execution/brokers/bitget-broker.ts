@@ -158,7 +158,14 @@ export class BitgetBroker extends BaseBroker {
   public async executeOrder(request: OrderRequest): Promise<ExecutionResult> {
     const isReal = process.env.BITGET_MODO_REAL === 'true';
     const mappedSymbol = this.mapSymbol(request.simbolo);
-    console.log(`[BitgetBroker] Preparando orden en Bitget ${isReal ? 'Real' : 'Demo'} para ${mappedSymbol} (${request.lado})...`);
+    const leverageToUse = request.leverage || 10;
+    console.log(`[BitgetBroker] Preparando orden en Bitget ${isReal ? 'Real' : 'Demo'} para ${mappedSymbol} (${request.lado}) con apalancamiento ${leverageToUse}x...`);
+
+    // Sincronizar apalancamiento explícitamente en el exchange antes de emitir la orden
+    await this.setLeverage(request.simbolo, leverageToUse, request.lado === 'BUY' ? 'long' : 'short');
+
+    // Usar clientOid determinista inmutable provisto por OrderManager
+    const clientOrderId = request.clientOid || `cli_${request.simbolo.replace('/', '').toLowerCase()}_${Date.now()}`;
 
     const transaccion = async (): Promise<ExecutionResult> => {
       // 1. Obtener precio actual de mercado para conversión precisa de tamaño
@@ -176,8 +183,6 @@ export class BitgetBroker extends BaseBroker {
       } else {
         formattedSize = Math.max(0.1, Number(rawCoinSize.toFixed(1))).toString();
       }
-
-      const clientOrderId = `cli_${Math.random().toString(36).substring(2, 12)}`;
 
       const isMarketOrder = request.tipo.toLowerCase() === 'market';
       const posSideVal = request.lado === 'BUY' ? 'long' : 'short';
@@ -218,7 +223,7 @@ export class BitgetBroker extends BaseBroker {
       for (let idx = 0; idx < variacionesPayload.length; idx++) {
         const payloadActual = variacionesPayload[idx];
         try {
-          console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Intentando variante de apertura ${idx + 1}/${variacionesPayload.length}:`, JSON.stringify(payloadActual));
+          console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Intentando variante de apertura ${idx + 1}/${variacionesPayload.length} [clientOid: ${clientOrderId}]:`, JSON.stringify(payloadActual));
           res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payloadActual);
           if (res) break; // ¡Éxito!
         } catch (err: any) {
@@ -232,7 +237,7 @@ export class BitgetBroker extends BaseBroker {
         throw ultimoError || new Error('No se pudo determinar el formato de orden compatible con la cuenta de Bitget.');
       }
 
-      const orderId = res.orderId || res.orderNo || `bitget_ord_${Math.random().toString(36).substring(2, 10)}`;
+      const orderId = res.orderId || res.orderNo || `bitget_ord_${clientOrderId}`;
       const priceExecuted = parseFloat(res.price || '0') || currentPrice;
       const sizeExecuted = parseFloat(res.size || formattedSize);
       const comisionUSD = Number((sizeExecuted * priceExecuted * 0.0006).toFixed(4));
@@ -244,11 +249,12 @@ export class BitgetBroker extends BaseBroker {
         precioEjecutado: priceExecuted,
         tamanoEjecutado: sizeExecuted,
         comisionUSD,
-        mensajeRespuesta: `Orden en Bitget ${isReal ? 'REAL' : 'DEMO'} colocada con éxito. ID: ${orderId}, Símbolo: ${mappedSymbol}, Lado: ${request.lado}, Tamaño: ${formattedSize} en $${priceExecuted.toLocaleString()} USD.`,
+        mensajeRespuesta: `Orden en Bitget ${isReal ? 'REAL' : 'DEMO'} colocada con éxito. ID: ${orderId}, ClientOid: ${clientOrderId}, Símbolo: ${mappedSymbol}, Lado: ${request.lado}, Tamaño: ${formattedSize} en $${priceExecuted.toLocaleString()} USD.`,
         timestamp: Date.now(),
         reintentosRealizados: 0
       };
     };
+
 
     const resultadoReintentos = await this.runWithExponentialBackoff(transaccion);
 
@@ -271,6 +277,34 @@ export class BitgetBroker extends BaseBroker {
   }
 
   /**
+   * Obtiene la cotización del ticker en tiempo real de Bitget.
+   */
+  public async getTicker(symbol: string): Promise<{ symbol: string; price: number; volume24h: number; high24h: number; low24h: number; timestamp: number } | null> {
+    try {
+      const mappedSymbol = this.mapSymbol(symbol);
+      const productType = this.getProductType();
+      const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
+
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (json.code !== '00000' || !json.data || json.data.length === 0) return null;
+
+      const t = json.data[0];
+      return {
+        symbol,
+        price: parseFloat(t.lastPr),
+        volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
+        high24h: parseFloat(t.high24h ?? t.lastPr),
+        low24h: parseFloat(t.low24h ?? t.lastPr),
+        timestamp: Date.now()
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * Consulta el balance disponible en el monedero de futuros de Bitget (Demo o Real).
    */
   public async getBalance(asset: string): Promise<number> {
@@ -282,24 +316,27 @@ export class BitgetBroker extends BaseBroker {
       console.log(`[BitgetBroker] [GET /api/v2/mix/account/accounts] Solicitando balance de margen (${isReal ? 'Real' : 'Demo'}) para target asset: ${queryAsset}, productType: ${targetProductType}`);
       const accounts = await this.sendRequest('GET', '/api/v2/mix/account/accounts', { productType: targetProductType });
       
-      if (Array.isArray(accounts)) {
-        const matched = accounts.find((acc: any) => 
-          acc.marginCoin.toUpperCase() === queryAsset || 
-          acc.marginCoin.toUpperCase() === asset.toUpperCase()
-        );
+      if (Array.isArray(accounts) && accounts.length > 0) {
+        const matched = accounts.find((acc: any) => {
+          const coin = (acc.marginCoin || acc.coin || '').toUpperCase();
+          return coin === queryAsset || coin === asset.toUpperCase() || coin.includes('USDT');
+        }) || accounts[0];
+
         if (matched) {
-          const available = parseFloat(matched.available || matched.equity || '0');
+          const available = parseFloat(matched.available || matched.availableBalance || matched.maxOpenPosAvailable || matched.equity || '0');
           if (!isNaN(available)) {
+            console.log(`[BitgetBroker] Balance obtenido con éxito: $${available} (${matched.marginCoin || matched.coin || asset})`);
             return available;
           }
         }
       }
       return 0;
     } catch (error: any) {
-      console.warn(`[BitgetBroker] Error al obtener balance real: ${error?.message || error}. Retornando 0 como contingencia.`);
+      console.warn(`[BitgetBroker] Aviso al obtener balance de Bitget (${error?.message || error}). Si no has guardado tus API Keys en la pestaña "Configuración API" o en .env, se utilizará 0 como salvaguarda.`);
       return 0;
     }
   }
+
 
   /**
    * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
@@ -341,6 +378,54 @@ export class BitgetBroker extends BaseBroker {
       }
       return null;
     } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Ajusta explícitamente el apalancamiento en la cuenta de Bitget para el símbolo dado.
+   */
+  public async setLeverage(symbol: string, leverage: number, holdSide: 'long' | 'short' = 'long'): Promise<boolean> {
+    try {
+      const mappedSymbol = this.mapSymbol(symbol);
+      const productType = this.getProductType();
+      const isReal = process.env.BITGET_MODO_REAL === 'true';
+      const marginCoin = isReal ? 'USDT' : (mappedSymbol.endsWith('SUSDT') ? 'SUSDT' : 'USDT');
+
+      console.log(`[BitgetBroker] Ajustando apalancamiento en Bitget a ${leverage}x para ${mappedSymbol}...`);
+      await this.sendRequest('POST', '/api/v2/mix/account/set-leverage', {}, {
+        symbol: mappedSymbol,
+        productType,
+        marginCoin,
+        leverage: leverage.toString(),
+        holdSide
+      });
+      return true;
+    } catch (err: any) {
+      console.warn(`[BitgetBroker] Aviso al ajustar apalancamiento a ${leverage}x en Bitget: ${err.message || err}`);
+      return false;
+    }
+  }
+
+  /**
+   * Consulta el estado de una orden en Bitget utilizando su clientOid determinista.
+   */
+  public async getOrderByClientOid(symbol: string, clientOid: string): Promise<any | null> {
+    try {
+      const mappedSymbol = this.mapSymbol(symbol);
+      const productType = this.getProductType();
+      console.log(`[BitgetBroker] Consultando estado de orden por clientOid (${clientOid}) en Bitget...`);
+      const res = await this.sendRequest('GET', '/api/v2/mix/order/detail', {
+        symbol: mappedSymbol,
+        productType,
+        clientOid
+      });
+      if (res && (res.orderId || res.clientOid)) {
+        return res;
+      }
+      return null;
+    } catch (err: any) {
+      console.warn(`[BitgetBroker] Orden con clientOid (${clientOid}) no encontrada o consulta fallida en Bitget: ${err.message || err}`);
       return null;
     }
   }
@@ -397,10 +482,10 @@ export class BitgetBroker extends BaseBroker {
             posSide: posSideVal,
             tradeSide: 'close',
             orderType: 'market',
-            force: 'ioc',
-            reduceOnly: 'yes'
+            force: 'ioc'
           }
         ];
+
 
         console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Enviando ORDEN DE CIERRE para ${mappedSymbol} (Lado: ${posSideVal.toUpperCase()}, Tamaño: ${absSize}, Margen: ${targetMarginCoin})...`);
         

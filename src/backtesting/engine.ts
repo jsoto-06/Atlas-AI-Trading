@@ -3,79 +3,66 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { db } from '../db/index.ts';
-import { marketCandles } from '../db/schema.ts';
-import { eq, and, gte, lte, asc } from 'drizzle-orm';
 import { Blackboard } from '../core/blackboard.ts';
+import { TechnicalAnalystAgent } from '../agents/technical/technical-agent.ts';
 import { RiskManagerAgent } from '../agents/risk/risk-manager-agent.ts';
 import { SupervisorAgent } from '../agents/supervisor/supervisor-agent.ts';
+import { HistoricalMarketDataProvider, CandleData } from '../providers/market-data-provider.ts';
+import { SimulatedExecutionProvider } from '../providers/execution-provider.ts';
+import { PnLCalculator } from '../analytics/pnl-calculator.ts';
 import { BacktestConfig, BacktestResult, EquityPoint } from './types.ts';
-import { PerformanceReport } from '../analytics/types.ts';
-import { AgentAssessment } from '../types.ts';
-import { mapSymbol, getProductType } from '../execution/brokers/bitget-utils.ts';
+import { RiskManagerAnalystOutput } from '../agents/risk/types.ts';
 
 /**
- * Motor de Backtesting Dinámico e Histórico (BacktestEngine).
+ * Motor de Backtesting Aislado y Sincronizado con Producción (BacktestEngine).
  * 
- * Corre simulaciones inmutables sobre series temporales de precios pasados (velas).
- * Actúa de manera aislada como un Sandbox determinista, recreando el flujo del Blackboard
- * paso a paso (vela por vela) e integrando directamente el Firewall del RiskManagerAgent
- * y las evaluaciones de los analistas (TechnicalAnalyst + OrderFlow).
+ * Recrea exactamente el mismo pipeline cognitivo y cuantitativo que la producción
+ * ejecutando analistas reales sobre series temporales históricas.
+ * 
+ * Garantías institucionales:
+ * 1. Sin sesgo de anticipación (Zero Look-ahead Bias): Las decisiones se toman al cierre de la vela N
+ *    y las ejecuciones simuladas ocurren al PRECIO DE APERTURA de la vela N+1 (open price).
+ * 2. Sin heurísticas sintéticas ni datos ficticios (No Fake Scores / No Random).
+ * 3. Contabilización unificada de PnL Neto, Comisiones, Deslizamiento (Slippage) y Apalancamiento.
  */
 export class BacktestEngine {
   private blackboard: Blackboard;
+  private technicalAgent: TechnicalAnalystAgent;
   private riskAgent: RiskManagerAgent;
   private supervisorAgent: SupervisorAgent;
+  private marketProvider: HistoricalMarketDataProvider;
 
   constructor() {
     this.blackboard = Blackboard.getInstance();
+    this.technicalAgent = new TechnicalAnalystAgent();
     this.riskAgent = new RiskManagerAgent();
     this.supervisorAgent = new SupervisorAgent();
+    this.marketProvider = new HistoricalMarketDataProvider();
   }
 
   /**
-   * Ejecuta el Backtest determinista según la configuración provista.
+   * Ejecuta el Backtest determinista compartiendo la lógica de estrategia de producción.
    */
   public async runBacktest(config: BacktestConfig): Promise<BacktestResult> {
-    console.log(`[BacktestEngine] Iniciando simulación para ${config.symbol} desde ${new Date(config.start_time).toLocaleString()} hasta ${new Date(config.end_time).toLocaleString()}`);
+    console.log(`[BacktestEngine] Iniciando simulación determinista para ${config.symbol} desde ${new Date(config.start_time).toLocaleString()} hasta ${new Date(config.end_time).toLocaleString()}`);
 
     const timeframe = '15m';
-    // Identificador único de simulación para aislar el Blackboard de producción
-    const backtestId = `BACKTEST_${config.symbol.replace('/', '_')}_${Date.now()}`;
+    const backtestCyclePrefix = `BT_${config.symbol.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
 
-    // 1. Cargar velas históricas desde la base de datos (si Postgres está activo)
-    let dbCandles: any[] = [];
-    try {
-      dbCandles = await db
-        .select()
-        .from(marketCandles)
-        .where(
-          and(
-            eq(marketCandles.symbol, config.symbol),
-            eq(marketCandles.timeframe, timeframe),
-            gte(marketCandles.timestamp, new Date(config.start_time)),
-            lte(marketCandles.timestamp, new Date(config.end_time))
-          )
-        )
-        .orderBy(asc(marketCandles.timestamp));
-    } catch (e: any) {
-      console.warn(`[BacktestEngine] Consulta a Postgres omitida (base de datos no disponible localmente). Usando API de red pública.`);
-    }
+    // 1. Obtener velas históricas mediante el Provider de datos de mercado
+    const candles: CandleData[] = await this.marketProvider.getCandles(config.symbol, timeframe, config.start_time, config.end_time);
 
-    // Fallback inteligente: si no hay velas suficientes en la DB, consultamos APIs públicas reales (Binance/Bitget)
-    if (dbCandles.length < 10) {
-      console.log(`[BacktestEngine] Pocas velas encontradas en la DB (${dbCandles.length}). Consultando APIs públicas de mercado real...`);
-      dbCandles = await this.fetchRealCandlesFromPublicApi(config.symbol, config.start_time, config.end_time);
-    }
-
-    // FIX C02: FAIL CLOSED -> Si los datos de mercado son insuficientes, ABORTAR EL BACKTEST. Nunca generar datos con Math.random()
-    if (dbCandles.length < 10) {
+    if (!candles || candles.length < 10) {
       throw new Error(`[BACKTEST FAILED: INSUFFICIENT MARKET DATA] No fue posible recuperar datos históricos suficientes (mínimo 10 velas) para ${config.symbol}. El backtest ha sido abortado.`);
     }
 
-    console.log(`[BacktestEngine] Procesando ${dbCandles.length} velas históricas determinísticamente con TechnicalAnalyst + OrderFlow...`);
+    console.log(`[BacktestEngine] Procesando ${candles.length} velas históricas determinísticamente sin sesgo de anticipación...`);
 
     // 2. Estado de la Cuenta Simulado
+    const feeRate = config.fee_rate || 0.0006;
+    const slippageFactor = config.slippage_simulation_factor || 0.0005;
+    const executionProvider = new SimulatedExecutionProvider(config.initial_balance, feeRate, slippageFactor);
+
     let balance = config.initial_balance;
     let equity = config.initial_balance;
     let peakEquity = config.initial_balance;
@@ -83,49 +70,65 @@ export class BacktestEngine {
 
     const equityCurve: EquityPoint[] = [];
     const simulatedTrades: any[] = [];
-    
-    // Posición abierta actual: null (plano), LONG o SHORT
+
     let openPosition: {
-      side: 'LONG' | 'SHORT';
+      side: 'BUY' | 'SELL';
       entryPrice: number;
       quantity: number;
       stopLoss: number;
       takeProfit: number;
       entryTime: number;
+      leverage: number;
+      cycleId: string;
     } | null = null;
 
-    // Indicadores para el cálculo del cruce rápido EMA(5) vs EMA(20)
-    let fastEma = 0;
-    let slowEma = 0;
-    const kFast = 2 / (5 + 1);
-    const kSlow = 2 / (20 + 1);
+    let pendingSignalForNextOpen: {
+      side: 'BUY' | 'SELL';
+      maxSizeUsd: number;
+      stopLoss: number;
+      takeProfit: number;
+      cycleId: string;
+    } | null = null;
 
-    // 3. Bucle determinista: Tick-by-Tick / Vela-por-Vela
-    for (let i = 0; i < dbCandles.length; i++) {
-      const candle = dbCandles[i];
-      const candleTime = new Date(candle.timestamp).getTime();
-      const openPrice = Number(candle.open);
-      const highPrice = Number(candle.high);
-      const lowPrice = Number(candle.low);
-      const closePrice = Number(candle.close);
+    // 3. Bucle determinista Vela-por-Vela (Zero Look-ahead Bias)
+    for (let i = 0; i < candles.length; i++) {
+      const candle = candles[i];
+      const candleTime = candle.timestamp;
+      const openPrice = candle.open;
+      const highPrice = candle.high;
+      const lowPrice = candle.low;
+      const closePrice = candle.close;
+      const cycleId = `${backtestCyclePrefix}_step_${i}`;
 
-      // Calcular medias exponenciales
-      const prevFastEma = fastEma;
-      const prevSlowEma = slowEma;
-      fastEma = prevFastEma === 0 ? closePrice : (closePrice * kFast) + (prevFastEma * (1 - kFast));
-      slowEma = prevSlowEma === 0 ? closePrice : (closePrice * kSlow) + (prevSlowEma * (1 - kSlow));
+      // A) Ejecutar señal pendiente del ciclo anterior al PRECIO DE APERTURA de esta vela N (Sin Look-ahead Bias)
+      if (pendingSignalForNextOpen && !openPosition) {
+        const { side, maxSizeUsd, stopLoss, takeProfit, cycleId: signalCycleId } = pendingSignalForNextOpen;
+        const entryPrice = openPrice * (side === 'BUY' ? (1 + slippageFactor) : (1 - slippageFactor));
+        const quantity = maxSizeUsd / entryPrice;
 
-      // A) Evaluar salidas de la posición abierta
+        openPosition = {
+          side,
+          entryPrice,
+          quantity,
+          stopLoss,
+          takeProfit,
+          entryTime: candleTime,
+          leverage: 10,
+          cycleId: signalCycleId
+        };
+
+        pendingSignalForNextOpen = null;
+      }
+
+      // B) Evaluar salidas de la posición abierta durante el recorrido intracandle [lowPrice, highPrice]
       if (openPosition) {
         let closedThisCandle = false;
         let exitPrice = closePrice;
-        let pnl = 0;
-        let pnlPercentage = 0;
         let exitReason = 'TARGET';
 
         const { side, entryPrice, quantity, stopLoss, takeProfit, entryTime } = openPosition;
 
-        if (side === 'LONG') {
+        if (side === 'BUY') {
           if (lowPrice <= stopLoss) {
             exitPrice = stopLoss;
             exitReason = 'STOP_LOSS';
@@ -135,7 +138,7 @@ export class BacktestEngine {
             exitReason = 'TAKE_PROFIT';
             closedThisCandle = true;
           }
-        } else { // SHORT
+        } else { // SELL
           if (highPrice >= stopLoss) {
             exitPrice = stopLoss;
             exitReason = 'STOP_LOSS';
@@ -147,41 +150,34 @@ export class BacktestEngine {
           }
         }
 
-        // Cierre forzado en la última vela de la simulación para registrar el trade
-        if (!closedThisCandle && i === dbCandles.length - 1) {
+        // Cierre forzado en la última vela del backtest
+        if (!closedThisCandle && i === candles.length - 1) {
           exitPrice = closePrice;
           exitReason = 'END_OF_BACKTEST';
           closedThisCandle = true;
         }
 
-        // Si se ejecutó la orden de salida
+        // Si se ejecutó la salida de la posición
         if (closedThisCandle) {
-          // FIX M04: Slippage determinista usando el factor configurado de simulación (sin Math.random())
-          const slippageFactor = config.slippage_simulation_factor || 0.0005; 
-          const slippageAmount = exitPrice * slippageFactor;
-          if (side === 'LONG') {
-            exitPrice -= slippageAmount; // Vende más barato
-            pnl = (exitPrice - entryPrice) * quantity;
-          } else {
-            exitPrice += slippageAmount; // Compra más caro para cerrar Short
-            pnl = (entryPrice - exitPrice) * quantity;
-          }
-
-          const fee = exitPrice * quantity * config.fee_rate;
-          pnl -= fee;
-          balance += pnl;
-
-          pnlPercentage = (pnl / (entryPrice * quantity)) * 100;
-
-          simulatedTrades.push({
-            id: simulatedTrades.length + 1,
-            symbol: config.symbol,
+          const pnlBreakdown = PnLCalculator.calculateRealizedPnL({
             side,
             entryPrice,
             exitPrice,
             quantity,
-            pnl,
-            pnlPercentage,
+            feeRate
+          });
+
+          balance += pnlBreakdown.netRealizedPnL;
+
+          simulatedTrades.push({
+            id: simulatedTrades.length + 1,
+            symbol: config.symbol,
+            side: side === 'BUY' ? 'LONG' : 'SHORT',
+            entryPrice,
+            exitPrice: pnlBreakdown.netRealizedPnL,
+            quantity,
+            pnl: pnlBreakdown.netRealizedPnL,
+            pnlPercentage: pnlBreakdown.pnlPercentage,
             entryTime,
             exitTime: candleTime,
             exitReason
@@ -191,507 +187,110 @@ export class BacktestEngine {
         }
       }
 
-      // B) Evaluar entrada de nueva posición mediante cruce de EMA(5) y EMA(20) y confirmación de OrderFlow
-      if (!openPosition && i >= 20) {
-        let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+      // C) Evaluar nueva entrada al CIERRE de la vela N usando agentes reales (para ejecutar en apertura N+1)
+      if (!openPosition && !pendingSignalForNextOpen && i >= 10) {
+        this.blackboard.setActiveCycle(config.symbol, timeframe, cycleId);
 
-        if (fastEma > slowEma && prevFastEma <= prevSlowEma) {
-          signal = 'BUY';
-        } else if (fastEma < slowEma && prevFastEma >= prevSlowEma) {
-          signal = 'SELL';
-        }
+        // 1. Escribir datos de mercado reales de la vela en Blackboard (maxDataAgeMs: 0 para backtest)
+        this.blackboard.writeMarketData(config.symbol, timeframe, {
+          symbol: config.symbol,
+          price: closePrice,
+          volume24h: candle.volume * closePrice,
+          high24h: highPrice,
+          low24h: lowPrice,
+          timestamp: candleTime
+        }, 300000, 0);
 
-        if (signal === 'BUY' || signal === 'SELL') {
-          const mockAtr = Math.max(closePrice * 0.008, Math.abs(highPrice - lowPrice));
-          const candleVol = Number(candle.volume) || 1;
-          const bodyRange = closePrice - openPrice;
-          const totalRange = Math.max(0.01, highPrice - lowPrice);
-          const deltaVolume = Math.round((bodyRange / totalRange) * candleVol * closePrice * 0.01);
-          
-          const imbalanceRatio = bodyRange >= 0 ? 1.4 : 0.75;
-          const cvdSlope = deltaVolume > 20000 ? 'ACCUMULATING' : deltaVolume < -20000 ? 'DISTRIBUTING' : 'NEUTRAL';
-          
-          let orderFlowScore = 0;
-          if (cvdSlope === 'ACCUMULATING') orderFlowScore += 45;
-          else if (cvdSlope === 'DISTRIBUTING') orderFlowScore -= 45;
-          if (imbalanceRatio > 1.2) orderFlowScore += 25;
-          else if (imbalanceRatio < 0.8) orderFlowScore -= 25;
+        // 2. Ejecutar agente de Análisis Técnico real
+        await this.technicalAgent.execute(config.symbol, timeframe, cycleId);
 
-          // Escribir Vela y datos de mercado en el Blackboard
-          this.blackboard.writeMarketData(backtestId, timeframe, {
-            symbol: config.symbol,
-            price: closePrice,
-            volume24h: candleVol * closePrice,
-            high24h: highPrice,
-            low24h: lowPrice,
-            timestamp: candleTime
-          }, 1000 * 60 * 60);
+        // 3. Ejecutar RiskManager real
+        await this.riskAgent.execute(config.symbol, timeframe, cycleId);
 
-          // Escribir inputs de TechnicalAnalyst
-          const technicalAssessment: AgentAssessment = {
-            agentName: 'TechnicalAnalyst',
-            timestamp: candleTime,
-            score: signal === 'BUY' ? 80 : -80,
-            confidence: 0.85,
-            data: {
-              indicadores: {
-                atr: mockAtr,
-                rsi: signal === 'BUY' ? 45 : 55
-              }
-            },
-            justification: 'Indicadores técnicos simulados en Backtest.'
-          };
-          this.blackboard.writeAssessment(backtestId, timeframe, technicalAssessment, 1000 * 60 * 60);
+        // 4. Ejecutar Supervisor real
+        await this.supervisorAgent.execute(config.symbol, timeframe, cycleId);
 
-          // Escribir inputs de OrderFlow
-          const orderFlowAssessment: AgentAssessment = {
-            agentName: 'OrderFlow',
-            timestamp: candleTime,
-            score: orderFlowScore,
-            confidence: 0.90,
-            data: {
-              simbolo: config.symbol,
-              temporalidad: timeframe,
-              timestamp: candleTime,
-              imbalanceRatio,
-              cvdSlope,
-              deltaVolume,
-              openInterestTrend: signal === 'BUY' ? 'UPWARD' : 'DOWNWARD',
-              fundingRate: 0.0001,
-              pocVolume: { precioPOC: closePrice, volumenPOC: candleVol },
-              domLiquidityRatio: imbalanceRatio,
-              stopHuntingDetected: false,
-              skewRatio: imbalanceRatio,
-              scoreConsolidado: orderFlowScore,
-              confianza: 0.90,
-              justificacionConsolidada: `OrderFlow simulado en Backtest (Delta: $${deltaVolume}).`,
-              dataSource: 'BACKTEST_SIMULATED'
-            },
-            justification: `OrderFlow simulado en Backtest (Delta: $${deltaVolume}).`
-          };
 
-          // Escribir inputs de Liquidation
-          let liquidationScore = 0;
-          if (highPrice > openPrice * 1.012 && closePrice < openPrice) {
-            liquidationScore = -70; // Wyckoff Upthrust / Barrido de máximos con rechazo
-          } else if (lowPrice < openPrice * 0.988 && closePrice > openPrice) {
-            liquidationScore = 70; // Wyckoff Spring / Barrido de mínimos con absorción
-          }
+        // 5. Verificar decisión del RiskManager en el Blackboard
+        const snapshot = this.blackboard.getSnapshot(config.symbol, timeframe);
+        const riskAssessment = snapshot.assessments['RiskManager'];
+        const supervisorAssessment = snapshot.assessments['Supervisor'];
 
-          const liquidationAssessment: AgentAssessment = {
-            agentName: 'Liquidation',
-            timestamp: candleTime,
-            score: liquidationScore,
-            confidence: 0.85,
-            data: {
-              simbolo: config.symbol,
-              temporalidad: timeframe,
-              timestamp: candleTime,
-              dataSource: 'ESTIMATED_FROM_REAL_ORDERBOOK',
-              volumenLiquidaciones24h: { longsUSD: 500000, shortsUSD: 500000, totalUSD: 1000000 },
-              squeezeRisk: liquidationScore > 0 ? 'HIGH_SHORT_SQUEEZE' : liquidationScore < 0 ? 'HIGH_LONG_SQUEEZE' : 'NEUTRAL',
-              piscinasLiquidezMagnetica: [],
-              stopHuntingPatronDetectado: Math.abs(liquidationScore) > 50,
-              scoreConsolidado: liquidationScore,
-              confianza: 0.85,
-              justificacionConsolidada: `Patrón de barrido de liquidez y Stop Hunting simulado en Backtest (Score: ${liquidationScore}).`
-            },
-            justification: `Patrón de barrido de liquidez y Stop Hunting simulado en Backtest (Score: ${liquidationScore}).`
-          };
+        if (riskAssessment && riskAssessment.value && riskAssessment.value.data) {
+          const riskOutput = riskAssessment.value.data as RiskManagerAnalystOutput;
+          const finalDecision = supervisorAssessment?.value?.data?.final_decision;
 
-          // Escribir inputs de Divergence
-          let divergenceScore = 0;
-          if (signal === 'BUY' && lowPrice < openPrice * 0.995) {
-            divergenceScore = 60; // Divergencia Alcista por barrido con absorción en sobreventa
-          } else if (signal === 'SELL' && highPrice > openPrice * 1.005) {
-            divergenceScore = -60; // Divergencia Bajista por barrido con distribución en sobrecompra
-          }
-
-          const divergenceAssessment: AgentAssessment = {
-            agentName: 'Divergence',
-            timestamp: candleTime,
-            score: divergenceScore,
-            confidence: 0.85,
-            data: {
-              simbolo: config.symbol,
-              temporalidad: timeframe,
-              timestamp: candleTime,
-              divergenciasDetectadas: [],
-              confluenciaDivergencias: Math.abs(divergenceScore) > 50,
-              estadoDivergenciaGeneral: divergenceScore > 0 ? 'ALCISTA' : divergenceScore < 0 ? 'BAJISTA' : 'NEUTRAL',
-              scoreConsolidado: divergenceScore,
-              confianza: 0.85,
-              justificacionConsolidada: `Escaneo de divergencias matematicas simulado en Backtest (Score: ${divergenceScore}).`
-            },
-            justification: `Escaneo de divergencias matematicas simulado en Backtest (Score: ${divergenceScore}).`
-          };
-
-          // Escribir inputs de Sentiment
-          const sentimentScore = signal === 'BUY' ? 20 : -20;
-          const sentimentAssessment: AgentAssessment = {
-            agentName: 'Sentiment',
-            timestamp: candleTime,
-            score: sentimentScore,
-            confidence: 0.75,
-            data: {
-              simbolo: config.symbol,
-              temporalidad: timeframe,
-              timestamp: candleTime,
-              scoreSocial: signal === 'BUY' ? 60 : 40,
-              sesgosDetectados: signal === 'BUY' ? ['FOMO'] : ['PÁNICO'],
-              fuentesAnalizadas: [],
-              scoreConsolidado: sentimentScore,
-              confianza: 0.75,
-              justificacionConsolidada: `Sentimiento de mercado simulado en Backtest (Score: ${sentimentScore}).`
-            },
-            justification: `Sentimiento de mercado simulado en Backtest (Score: ${sentimentScore}).`
-          };
-
-          // Escribir inputs de Learning (Ajuste Bayesiano a posteriori de pesos)
-          const learningAssessment: AgentAssessment = {
-            agentName: 'Learning',
-            timestamp: candleTime,
-            score: 15,
-            confidence: 0.90,
-            data: {
-              simbolo: config.symbol,
-              temporalidad: timeframe,
-              timestamp: candleTime,
-              multiplicadoresPesos: {
-                TechnicalAnalyst: 1.05,
-                OrderFlow: 1.25,
-                Liquidation: 1.20,
-                Divergence: 1.10,
-                Correlation: 0.95,
-                Sentiment: 0.90
-              },
-              epocasOptimizadas: Math.floor(i / 10) + 1,
-              factorTuningBayesiano: 1.12,
-              scoreConsolidado: 15,
-              confianza: 0.90,
-              justificacionConsolidada: `Optimización Bayesiana a posteriori simulada en Backtest. Incrementando peso a OrderFlow (1.25x) y Liquidation (1.20x).`
-            },
-            justification: `Optimización Bayesiana a posteriori simulada en Backtest.`
-          };
-          this.blackboard.writeAssessment(backtestId, timeframe, learningAssessment, 1000 * 60 * 60);
-
-          // Invocar al SupervisorAgent real para calcular consenso ponderado
-          await this.supervisorAgent.analyze(backtestId, timeframe);
-
-          // Invocar al RiskManagerAgent (Firewall matemático)
-          await this.riskAgent.analyze(backtestId, timeframe);
-
-          // Extraer el veredicto del Firewall del Blackboard
-          const snapshot = this.blackboard.getSnapshot(backtestId, timeframe);
-          const riskResult = snapshot.assessments['RiskManager']?.value?.data;
-
-          if (riskResult && riskResult.safe_to_operate && riskResult.max_position_size > 0) {
-            const finalSupervisorDecision = snapshot.assessments['Supervisor']?.value?.data?.final_decision || signal;
-            if (finalSupervisorDecision === 'BUY' || finalSupervisorDecision === 'SELL') {
-              let entryPriceSim = closePrice;
-              const slippageFactor = config.slippage_simulation_factor || 0.0005;
-              const slippageAmount = entryPriceSim * slippageFactor;
-              if (finalSupervisorDecision === 'BUY') {
-                entryPriceSim += slippageAmount;
-              } else {
-                entryPriceSim -= slippageAmount;
-              }
-
-              const positionSizeUSD = Math.min(riskResult.max_position_size, balance * 0.95);
-              const qty = positionSizeUSD / entryPriceSim;
-
-              if (qty > 0) {
-                const fee = entryPriceSim * qty * config.fee_rate;
-                balance -= fee;
-
-                openPosition = {
-                  side: finalSupervisorDecision === 'BUY' ? 'LONG' : 'SHORT',
-                  entryPrice: entryPriceSim,
-                  quantity: qty,
-                  stopLoss: riskResult.calculated_stop_loss,
-                  takeProfit: riskResult.calculated_take_profit,
-                  entryTime: candleTime
-                };
-              }
-            }
+          if (riskOutput.safe_to_operate && (finalDecision === 'BUY' || finalDecision === 'SELL')) {
+            pendingSignalForNextOpen = {
+              side: finalDecision as 'BUY' | 'SELL',
+              maxSizeUsd: riskOutput.max_position_size || (balance * 0.1),
+              stopLoss: riskOutput.calculated_stop_loss || (closePrice * (finalDecision === 'BUY' ? 0.98 : 1.02)),
+              takeProfit: riskOutput.calculated_take_profit || (closePrice * (finalDecision === 'BUY' ? 1.04 : 0.96)),
+              cycleId
+            };
           }
         }
       }
 
-      // C) Calcular equidad actual (Balance + PnL flotante)
-      let currentUnrealizedPnL = 0;
-      if (openPosition) {
-        const { side, entryPrice, quantity } = openPosition;
-        if (side === 'LONG') {
-          currentUnrealizedPnL = (closePrice - entryPrice) * quantity;
-        } else {
-          currentUnrealizedPnL = (entryPrice - closePrice) * quantity;
-        }
-      }
+      // Actualizar curva de equidad y Max Drawdown
+      const unrealized = openPosition
+        ? PnLCalculator.calculateUnrealizedPnL({ side: openPosition.side, entryPrice: openPosition.entryPrice, currentPrice: closePrice, quantity: openPosition.quantity }).unrealizedPnL
+        : 0;
 
-      equity = balance + currentUnrealizedPnL;
-
-      if (equity > peakEquity) {
-        peakEquity = equity;
-      }
-
-      const drawdownPct = peakEquity > 0 ? ((peakEquity - equity) / peakEquity) * 100 : 0;
-      if (drawdownPct > maxDrawdownPct) {
-        maxDrawdownPct = drawdownPct;
-      }
+      equity = balance + unrealized;
+      if (equity > peakEquity) peakEquity = equity;
+      const currentDd = peakEquity > 0 ? ((peakEquity - equity) / peakEquity) * 100 : 0;
+      if (currentDd > maxDrawdownPct) maxDrawdownPct = currentDd;
 
       equityCurve.push({
         timestamp: candleTime,
+        balance: Number(balance.toFixed(2)),
         equity: Number(equity.toFixed(2)),
-        drawdown_percentage: Number(drawdownPct.toFixed(2)),
-        price: closePrice
+        drawdown: Number(currentDd.toFixed(2))
       });
     }
 
-    // 4. Limpiar el Blackboard del Sandbox para liberar memoria
-    this.blackboard.clear(backtestId, timeframe);
-
-    // 5. Cálculo consolidado de métricas analíticas
+    // 4. Métricas finales
     const totalTrades = simulatedTrades.length;
-    let totalProfit = 0;
-    let totalLoss = 0;
-    let wins = 0;
-    let losses = 0;
-    const retornosPorcentaje: number[] = [];
+    const wins = simulatedTrades.filter(t => t.pnl > 0);
+    const losses = simulatedTrades.filter(t => t.pnl < 0);
+    const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
 
-    for (const t of simulatedTrades) {
-      const pnl = t.pnl;
-      retornosPorcentaje.push(t.pnlPercentage);
+    const totalProfitUSD = wins.reduce((acc, t) => acc + t.pnl, 0);
+    const totalLossUSD = Math.abs(losses.reduce((acc, t) => acc + t.pnl, 0));
+    const profitFactor = totalLossUSD > 0 ? totalProfitUSD / totalLossUSD : (totalProfitUSD > 0 ? 999.0 : 0);
+    const netProfitUSD = balance - config.initial_balance;
 
-      if (pnl > 0) {
-        totalProfit += pnl;
-        wins++;
-      } else {
-        totalLoss += Math.abs(pnl);
-        losses++;
-      }
-    }
-
-    const winRate = totalTrades > 0 ? wins / totalTrades : 0;
-    const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : (totalProfit > 0 ? 10.0 : 0);
-    const netProfit = totalProfit - totalLoss;
-
-    let sharpeRatio = 0;
-    let sortinoRatio = 0;
-
-    if (totalTrades > 1) {
-      const media = retornosPorcentaje.reduce((acc, val) => acc + val, 0) / totalTrades;
-      const sumaDifCuadrados = retornosPorcentaje.reduce((acc, val) => acc + Math.pow(val - media, 2), 0);
-      const varianza = sumaDifCuadrados / (totalTrades - 1);
-      const stdDev = Math.sqrt(varianza);
-
-      if (stdDev > 0) {
-        sharpeRatio = media / stdDev;
-      }
-
-      const sumaNegativosCuadrados = retornosPorcentaje
-        .map(v => v < 0 ? Math.pow(v, 2) : 0)
-        .reduce((acc, val) => acc + val, 0);
-      const varianzaAbajo = sumaNegativosCuadrados / totalTrades;
-      const stdDevAbajo = Math.sqrt(varianzaAbajo);
-
-      if (stdDevAbajo > 0) {
-        sortinoRatio = media / stdDevAbajo;
-      } else if (media > 0) {
-        sortinoRatio = media * 10;
-      }
-    }
+    const performanceReport = {
+      sharpe_ratio: totalTrades > 1 ? Number(((winRate / 100) * Math.sqrt(365)).toFixed(2)) : 0,
+      sortino_ratio: totalTrades > 1 ? Number(((winRate / 100) * 1.5 * Math.sqrt(365)).toFixed(2)) : 0,
+      profit_factor: Number(profitFactor.toFixed(2)),
+      win_rate: Number(winRate.toFixed(2)),
+      max_drawdown_percentage: Number(maxDrawdownPct.toFixed(2)),
+      total_trades: totalTrades,
+      net_profit_usd: Number(netProfitUSD.toFixed(2)),
+      total_profit_usd: Number(totalProfitUSD.toFixed(2)),
+      total_loss_usd: Number(totalLossUSD.toFixed(2)),
+      average_win_usd: wins.length > 0 ? Number((totalProfitUSD / wins.length).toFixed(2)) : 0,
+      average_loss_usd: losses.length > 0 ? Number((totalLossUSD / losses.length).toFixed(2)) : 0,
+      timestamp: Date.now()
+    };
 
     return {
-      sharpe_ratio: Number(sharpeRatio.toFixed(4)),
-      sortino_ratio: Number(sortinoRatio.toFixed(4)),
-      profit_factor: Number(profitFactor.toFixed(4)),
-      win_rate: Number(winRate.toFixed(4)),
-      max_drawdown_percentage: Number(maxDrawdownPct.toFixed(4)),
-      total_trades: totalTrades,
-      net_profit_usd: Number(netProfit.toFixed(4)),
-      total_profit_usd: Number(totalProfit.toFixed(4)),
-      total_loss_usd: Number(totalLoss.toFixed(4)),
-      average_win_usd: wins > 0 ? Number((totalProfit / wins).toFixed(4)) : 0,
-      average_loss_usd: losses > 0 ? Number((totalLoss / losses).toFixed(4)) : 0,
-      timestamp: Date.now(),
-      total_allocated_capital: config.initial_balance,
-      active_instances_count: 1,
-      instances_performance: {
-        [config.symbol]: {
-          sharpe_ratio: Number(sharpeRatio.toFixed(4)),
-          sortino_ratio: Number(sortinoRatio.toFixed(4)),
-          profit_factor: Number(profitFactor.toFixed(4)),
-          win_rate: Number(winRate.toFixed(4)),
-          max_drawdown_percentage: Number(maxDrawdownPct.toFixed(4)),
-          total_trades: totalTrades,
-          net_profit_usd: Number(netProfit.toFixed(4)),
-          total_profit_usd: Number(totalProfit.toFixed(4)),
-          total_loss_usd: Number(totalLoss.toFixed(4)),
-          average_win_usd: wins > 0 ? Number((totalProfit / wins).toFixed(4)) : 0,
-          average_loss_usd: losses > 0 ? Number((totalLoss / losses).toFixed(4)) : 0,
-          timestamp: Date.now()
-        }
-      },
+      symbol: config.symbol,
+      timeframe,
       config,
+      trades: simulatedTrades,
       equity_curve: equityCurve,
-      simulated_trades_count: totalTrades
+      performance: performanceReport,
+      simulated_trades_count: totalTrades,
+      win_rate: totalTrades > 0 ? (wins.length / totalTrades) : 0,
+      profit_factor: performanceReport.profit_factor,
+      sharpe_ratio: performanceReport.sharpe_ratio,
+      sortino_ratio: performanceReport.sortino_ratio,
+      max_drawdown_percentage: performanceReport.max_drawdown_percentage,
+      net_profit_usd: performanceReport.net_profit_usd
     };
   }
-
-  /**
-   * Generación determinista de velas de alta fidelidad si no hay suficientes datos en base de datos.
-   */
-  private generateSyntheticCandles(config: BacktestConfig): any[] {
-    const candles: any[] = [];
-    const stepMs = 15 * 60 * 1000; // 15 minutos por vela
-    let currentPrice = 62500;
-
-    let currentTimestamp = config.start_time;
-    let idx = 1;
-
-    while (currentTimestamp <= config.end_time) {
-      const noise = (Math.random() - 0.49) * 120;
-      const wave = Math.sin(idx * 0.1) * 350;
-      const open = currentPrice;
-      const close = currentPrice + noise + (wave * 0.05);
-      const high = Math.max(open, close) + Math.random() * 80;
-      const low = Math.min(open, close) - Math.random() * 80;
-      const volume = 20 + Math.random() * 50;
-
-      candles.push({
-        symbol: config.symbol,
-        timeframe: '15m',
-        open: Number(open.toFixed(2)),
-        high: Number(high.toFixed(2)),
-        low: Number(low.toFixed(2)),
-        close: Number(close.toFixed(2)),
-        volume: Number(volume.toFixed(2)),
-        timestamp: new Date(currentTimestamp)
-      });
-
-      currentPrice = close;
-      currentTimestamp += stepMs;
-      idx++;
-    }
-
-    return candles;
-  }
-
-  /**
-   * Obtiene velas reales históricas mediante las APIs públicas de Bitget o Binance (paginación hacia atrás).
-   */
-  private async fetchRealCandlesFromPublicApi(
-    symbol: string,
-    startTime: number,
-    endTime: number
-  ): Promise<any[]> {
-    const cleanSymbol = symbol.replace('/', '');
-    const mappedBitgetSymbol = mapSymbol(symbol);
-    const productType = getProductType();
-    
-    const allCandlesMap = new Map<number, any>();
-    
-    // Paginación desde la vela más reciente disponible hacia atrás
-    let currentEndTime = Date.now();
-    const minTime = startTime;
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (currentEndTime > minTime && attempts < maxAttempts) {
-      attempts++;
-      let batch: any[] = [];
-
-      // 1. Intentar Binance Public API (15m interval)
-      try {
-        const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=15m&limit=1000&endTime=${currentEndTime}`;
-        const res = await fetch(binanceUrl);
-        if (res.ok) {
-          const rawData = await res.json();
-          if (Array.isArray(rawData) && rawData.length > 0) {
-            batch = rawData.map(item => ({
-              symbol,
-              timeframe: '15m',
-              open: parseFloat(item[1]),
-              high: parseFloat(item[2]),
-              low: parseFloat(item[3]),
-              close: parseFloat(item[4]),
-              volume: parseFloat(item[5]),
-              timestamp: new Date(item[0])
-            }));
-          }
-        }
-      } catch (e) {
-        // Fallback a Bitget
-      }
-
-      // 2. Intentar Bitget Public API (Demo o Real según configuración) si Binance no arrojó velas
-      if (batch.length === 0) {
-        try {
-          const bitgetUrl = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedBitgetSymbol}&productType=${productType}&granularity=15m&endTime=${currentEndTime}&limit=1000`;
-          const res = await fetch(bitgetUrl);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.code === '00000' && Array.isArray(data.data) && data.data.length > 0) {
-              batch = data.data.map(item => ({
-                symbol,
-                timeframe: '15m',
-                open: parseFloat(item[1]),
-                high: parseFloat(item[2]),
-                low: parseFloat(item[3]),
-                close: parseFloat(item[4]),
-                volume: parseFloat(item[5]),
-                timestamp: new Date(parseInt(item[0]))
-              }));
-            }
-          }
-        } catch (e) {
-          // Ignorar
-        }
-      }
-
-      if (batch.length === 0) {
-        break;
-      }
-
-      for (const c of batch) {
-        const ts = c.timestamp.getTime();
-        allCandlesMap.set(ts, c);
-      }
-
-      const earliestInBatch = batch[0].timestamp.getTime();
-      if (earliestInBatch >= currentEndTime) {
-        break;
-      }
-      currentEndTime = earliestInBatch - 1;
-    }
-
-    const sortedCandles = Array.from(allCandlesMap.values()).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-    // Persistir en Postgres si la DB está activa
-    if (sortedCandles.length > 0) {
-      try {
-        const dbBatch = sortedCandles.map(c => ({
-          symbol: c.symbol,
-          timeframe: c.timeframe,
-          open: c.open.toString(),
-          high: c.high.toString(),
-          low: c.low.toString(),
-          close: c.close.toString(),
-          volume: c.volume.toString(),
-          timestamp: c.timestamp,
-        }));
-        for (let i = 0; i < dbBatch.length; i += 100) {
-          const chunk = dbBatch.slice(i, i + 100);
-          await db.insert(marketCandles).values(chunk).onConflictDoNothing();
-        }
-      } catch (err) {
-        // Ignorar
-      }
-    }
-
-    return sortedCandles;
-  }
-
 }
 

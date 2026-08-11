@@ -13,18 +13,21 @@ export enum BlackboardEvent {
   ASSESSMENT_UPDATED = 'ASSESSMENT_UPDATED',
   MARKET_DATA_UPDATED = 'MARKET_DATA_UPDATED',
   STATE_PRUNED = 'STATE_PRUNED',
+  STALE_DATA_REJECTED = 'STALE_DATA_REJECTED',
 }
 
 /**
  * Institutional-grade Blackboard memory store.
  * Manages concurrent state snapshots across multiple symbol/timeframe pairs.
- * Implements strict type checking, reactive EventEmitters, and TTL-based data invalidation.
+ * Implements strict type checking, reactive EventEmitters, cycleId tracking, and TTL-based data invalidation.
  */
 export class Blackboard extends EventEmitter {
   private static instance: Blackboard | null = null;
 
   // Internal storage mapping composite keys `symbol:timeframe` to their respective BlackboardState
   private store: Map<string, BlackboardState> = new Map();
+  // Tracks active cycleId per composite key `symbol:timeframe` to prevent stale cycle writes
+  private activeCycles: Map<string, string> = new Map();
 
   // Interval timer reference for periodic background TTL cleanup
   private pruneIntervalRef: NodeJS.Timeout | null = null;
@@ -50,6 +53,22 @@ export class Blackboard extends EventEmitter {
    */
   private makeKey(symbol: string, timeframe: string): string {
     return `${symbol.toUpperCase().trim()}:${timeframe.toLowerCase().trim()}`;
+  }
+
+  /**
+   * Registra el cycleId activo actual para un asset/timeframe.
+   */
+  public setActiveCycle(symbol: string, timeframe: string, cycleId: string): void {
+    const key = this.makeKey(symbol, timeframe);
+    this.activeCycles.set(key, cycleId);
+  }
+
+  /**
+   * Obtiene el cycleId activo actual para un asset/timeframe.
+   */
+  public getActiveCycle(symbol: string, timeframe: string): string | undefined {
+    const key = this.makeKey(symbol, timeframe);
+    return this.activeCycles.get(key);
   }
 
   /**
@@ -83,11 +102,24 @@ export class Blackboard extends EventEmitter {
   }
 
   /**
-   * Writes the latest market state snapshot for an asset.
+   * Writes the latest market state snapshot for an asset after validating timestamp freshness.
    */
-  public writeMarketData(symbol: string, timeframe: string, data: MarketStateSnapshot, ttl: number = 300000): void {
-    const state = this.getOrInitializeState(symbol, timeframe);
+  public writeMarketData(
+    symbol: string,
+    timeframe: string,
+    data: MarketStateSnapshot,
+    ttl: number = 300000,
+    maxDataAgeMs: number = 30000
+  ): boolean {
     const now = Date.now();
+    // VALIDACIÓN CRÍTICA: Rechazar datos de mercado stale sólo si maxDataAgeMs > 0
+    if (maxDataAgeMs > 0 && data.timestamp > 0 && (now - data.timestamp > maxDataAgeMs)) {
+      console.warn(`[Blackboard] [STALE_MARKET_DATA] Rechazando market data para ${symbol} (${timeframe}). Antigüedad: ${now - data.timestamp}ms > ${maxDataAgeMs}ms.`);
+      this.emit(BlackboardEvent.STALE_DATA_REJECTED, { symbol, timeframe, reason: 'MARKET_DATA_EXPIRED', timestamp: now });
+      return false;
+    }
+
+    const state = this.getOrInitializeState(symbol, timeframe);
 
     state.marketData = {
       value: data,
@@ -101,18 +133,21 @@ export class Blackboard extends EventEmitter {
       marketData: data,
       timestamp: now,
     });
+    return true;
   }
 
   /**
    * Safe, reactive write operation for an individual agent's assessment.
-   * If the writing agent is malicious, slow, or produces invalid metrics, this method safely discards.
+   * Valida estricta frescura de timestamp y coincidencia de cycleId.
    */
   public writeAssessment(
     symbol: string,
     timeframe: string,
     assessment: AgentAssessment,
-    ttl: number = 1800000 // Default assessment TTL is 30 minutes
-  ): void {
+    ttl: number = 1800000, // Default assessment TTL is 30 minutes
+    cycleId?: string,
+    maxDataAgeMs: number = 30000
+  ): boolean {
     // Basic validation of scoring limits to prevent database/execution corruption
     if (assessment.score < -100 || assessment.score > 100) {
       throw new Error(`Agent ${assessment.agentName} produced out-of-bounds score: ${assessment.score}. Must be [-100, 100].`);
@@ -121,8 +156,26 @@ export class Blackboard extends EventEmitter {
       throw new Error(`Agent ${assessment.agentName} produced out-of-bounds confidence: ${assessment.confidence}. Must be [0, 1].`);
     }
 
-    const state = this.getOrInitializeState(symbol, timeframe);
+    const key = this.makeKey(symbol, timeframe);
+    const activeCycle = this.activeCycles.get(key);
     const now = Date.now();
+
+    // 1. VALIDACIÓN DE CYCLE ID: Evitar que evaluaciones tardías de un ciclo N modifiquen el ciclo N+1
+    if (cycleId && activeCycle && cycleId !== activeCycle) {
+      console.warn(`[Blackboard] [STALE_CYCLE_REJECTED] Agente ${assessment.agentName} intentó escribir en ciclo expirado ${cycleId} (Ciclo activo actual: ${activeCycle}). Escritura descartada.`);
+      this.emit(BlackboardEvent.STALE_DATA_REJECTED, { symbol, timeframe, agentName: assessment.agentName, reason: 'CYCLE_MISMATCH', cycleId, activeCycle });
+      return false;
+    }
+
+    // 2. VALIDACIÓN DE FRESCURA DE TIMESTAMP (sólo si maxDataAgeMs > 0)
+    if (maxDataAgeMs > 0 && assessment.timestamp > 0 && (now - assessment.timestamp > maxDataAgeMs)) {
+      console.warn(`[Blackboard] [STALE_TIMESTAMP_REJECTED] Agente ${assessment.agentName} produjo evaluación antigua (${now - assessment.timestamp}ms > ${maxDataAgeMs}ms). Escritura descartada.`);
+      this.emit(BlackboardEvent.STALE_DATA_REJECTED, { symbol, timeframe, agentName: assessment.agentName, reason: 'TIMESTAMP_EXPIRED' });
+      return false;
+    }
+
+
+    const state = this.getOrInitializeState(symbol, timeframe);
 
     state.assessments[assessment.agentName] = {
       value: {
@@ -140,6 +193,7 @@ export class Blackboard extends EventEmitter {
       assessment,
       timestamp: now,
     });
+    return true;
   }
 
   /**
@@ -191,6 +245,7 @@ export class Blackboard extends EventEmitter {
   public clear(symbol: string, timeframe: string): void {
     const key = this.makeKey(symbol, timeframe);
     this.store.delete(key);
+    this.activeCycles.delete(key);
   }
 
   /**
@@ -198,6 +253,7 @@ export class Blackboard extends EventEmitter {
    */
   public clearAll(): void {
     this.store.clear();
+    this.activeCycles.clear();
   }
 
   /**
@@ -216,10 +272,10 @@ export class Blackboard extends EventEmitter {
         }
       }
       
-      // FIX H09: Delete empty symbol keys from store Map when both market data and all assessments are expired
       const isMarketDataExpired = state.marketData.ttl > 0 && (now - state.marketData.lastUpdated >= state.marketData.ttl);
       if (Object.keys(state.assessments).length === 0 && isMarketDataExpired) {
         this.store.delete(key);
+        this.activeCycles.delete(key);
       }
     }
 

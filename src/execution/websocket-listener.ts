@@ -42,7 +42,16 @@ type PositionCallback = (event: WSPositionEvent) => void | Promise<void>;
  *    permitiendo certificar la lógica de conciliación sin congelar los hilos de ejecución.
  */
 export class BitgetWebSocketListener {
+  private static instance: BitgetWebSocketListener | null = null;
   private readonly wsUrl = 'wss://ws.bitget.com/v2/mix/private';
+
+  public static getInstance(): BitgetWebSocketListener {
+    if (!BitgetWebSocketListener.instance) {
+      BitgetWebSocketListener.instance = new BitgetWebSocketListener();
+    }
+    return BitgetWebSocketListener.instance;
+  }
+
   private ws: any = null; // Tipo genérico para soportar entornos con/sin cargador global de WebSocket
   private ordersCallbacks: Set<OrderCallback> = new Set();
   private positionsCallbacks: Set<PositionCallback> = new Set();

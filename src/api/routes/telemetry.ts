@@ -5,7 +5,8 @@
 
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { db } from '../../db/index.ts';
-import { settings, learningPerformance, trades } from '../../db/schema.ts';
+import { settings, learningPerformance, trades, auditLogs } from '../../db/schema.ts';
+
 import { Blackboard } from '../../core/blackboard.ts';
 import { MetricsCalculator } from '../../analytics/metrics-calculator.ts';
 import { eq, desc } from 'drizzle-orm';
@@ -456,4 +457,29 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
       (reply as any).status(500).send({ error: 'Internal Server Error', message: error.message });
     }
   });
+
+  /**
+   * 8. GET /api/v1/telemetry/logs
+   * Obtiene los logs de auditoría almacenados en DB.
+   */
+  fastify.get('/logs', async (request, reply) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt((request.query as any)?.limit) || 80));
+      let logs: any[] = [];
+      try {
+        logs = await db
+          .select()
+          .from(auditLogs)
+          .orderBy(desc(auditLogs.timestamp))
+          .limit(limit);
+      } catch (e) {
+        // Fallback si la DB no está disponible
+      }
+      return logs;
+    } catch (error: any) {
+      fastify.log.error(`Error en GET /telemetry/logs: ${error.message}`);
+      return [];
+    }
+  });
 };
+

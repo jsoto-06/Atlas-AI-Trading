@@ -1,9 +1,32 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OrderRouter } from '../../src/execution/order-router.ts';
 import { RiskManagerAnalystOutput } from '../../src/agents/risk/types.ts';
 import { Blackboard } from '../../src/core/blackboard.ts';
+import { db } from '../../src/db/index.ts';
 
 describe('OrderRouter Unit Tests', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+
+    vi.spyOn(db, 'insert').mockReturnValue({
+      values: () => ({
+        onConflictDoNothing: async () => ({})
+      })
+    } as any);
+    vi.spyOn(db, 'update').mockReturnValue({
+      set: () => ({
+        where: async () => ({})
+      })
+    } as any);
+    vi.spyOn(db, 'select').mockReturnValue({
+      from: () => ({
+        where: () => ({
+          limit: async () => []
+        })
+      })
+    } as any);
+  });
+
   it('debe abortar si safe_to_operate es false', async () => {
     const router = new OrderRouter();
     const mockRiskOutput: RiskManagerAnalystOutput = {

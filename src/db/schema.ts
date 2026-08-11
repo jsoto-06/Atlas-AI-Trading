@@ -170,5 +170,30 @@ export const marketTickers = pgTable('market_tickers', {
   index('market_tickers_symbol_timestamp_idx').on(table.symbol, table.timestamp)
 ]);
 
+// 11. Orders Table (Deterministic order intent tracking & clientOid idempotency)
+export const orders = pgTable('orders', {
+  id: serial('id').primaryKey(),
+  clientOid: text('client_oid').notNull().unique(),
+  symbol: text('symbol').notNull(),
+  side: text('side').notNull(), // "BUY" or "SELL"
+  orderType: text('order_type').default('MARKET').notNull(),
+  size: numeric('size', { precision: 20, scale: 8 }).notNull(),
+  stopLoss: numeric('stop_loss', { precision: 20, scale: 8 }),
+  takeProfit: numeric('take_profit', { precision: 20, scale: 8 }),
+  leverage: integer('leverage').default(10).notNull(),
+  status: text('status').default('CREATED').notNull(), // CREATED, SUBMITTING, UNKNOWN, OPEN, FILLED, PARTIALLY_FILLED, CANCELED, REJECTED, FAILED
+  cycleId: text('cycle_id'),
+  retryCount: integer('retry_count').default(0).notNull(),
+  exchangeOrderId: text('exchange_order_id'),
+  errorDetails: text('error_details'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('orders_client_oid_idx').on(table.clientOid),
+  index('orders_status_idx').on(table.status),
+  index('orders_symbol_status_idx').on(table.symbol, table.status)
+]);
+
+
 
 

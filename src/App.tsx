@@ -2058,51 +2058,63 @@ export default function App() {
                     </div>
 
                     {/* Results Display */}
-                    {backtestResult ? (
-                      <div className="bg-[#0a0c14] border border-[#191d35] p-4 rounded-lg space-y-3 font-mono">
-                        <div className="flex items-center justify-between text-xs border-b border-[#182645] pb-2">
-                          <span className="text-slate-400 font-bold uppercase">Resultados de Simulación</span>
-                          <span className="text-emerald-400 font-bold">{backtestResult.simulated_trades_count} Trades Ejecutados</span>
+                    {backtestResult ? (() => {
+                      const netProfit = backtestResult.net_profit_usd ?? backtestResult.performance?.net_profit_usd ?? 0;
+                      const winRate = backtestResult.win_rate ?? (backtestResult.performance?.win_rate != null ? backtestResult.performance.win_rate / 100 : 0);
+                      const winRatePct = winRate > 1 ? winRate : winRate * 100;
+                      const profitFactor = backtestResult.profit_factor ?? backtestResult.performance?.profit_factor ?? 0;
+                      const sharpeRatio = backtestResult.sharpe_ratio ?? backtestResult.performance?.sharpe_ratio ?? 0;
+                      const sortinoRatio = backtestResult.sortino_ratio ?? backtestResult.performance?.sortino_ratio ?? 0;
+                      const maxDrawdown = backtestResult.max_drawdown_percentage ?? backtestResult.performance?.max_drawdown_percentage ?? 0;
+                      const tradesCount = backtestResult.simulated_trades_count ?? backtestResult.performance?.total_trades ?? 0;
+
+                      return (
+                        <div className="bg-[#0a0c14] border border-[#191d35] p-4 rounded-lg space-y-3 font-mono">
+                          <div className="flex items-center justify-between text-xs border-b border-[#182645] pb-2">
+                            <span className="text-slate-400 font-bold uppercase">Resultados de Simulación</span>
+                            <span className="text-emerald-400 font-bold">{tradesCount} Trades Ejecutados</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block">WIN RATE</span>
+                              <span className={`font-bold text-sm ${winRatePct >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {winRatePct.toFixed(1)}%
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block">PROFIT FACTOR</span>
+                              <span className={`font-bold text-sm ${profitFactor >= 1.5 ? 'text-emerald-400' : profitFactor >= 1.0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                                {profitFactor}
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block">SHARPE / SORTINO</span>
+                              <span className="font-bold text-sm text-indigo-400">
+                                {sharpeRatio} / {sortinoRatio}
+                              </span>
+                            </div>
+
+                            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+                              <span className="text-[9px] text-slate-400 block">MAX DRAWDOWN</span>
+                              <span className="font-bold text-sm text-rose-400">
+                                -{maxDrawdown}%
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-900/40 p-2.5 rounded border border-slate-800/80 flex items-center justify-between text-xs">
+                            <span className="text-slate-400">GANANCIA NETA TOTAL:</span>
+                            <span className={`font-bold ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              ${netProfit >= 0 ? '+' : ''}{Number(netProfit).toLocaleString()} USD
+                            </span>
+                          </div>
                         </div>
+                      );
+                    })() : (
 
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                            <span className="text-[9px] text-slate-400 block">WIN RATE</span>
-                            <span className={`font-bold text-sm ${backtestResult.win_rate >= 0.5 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {(backtestResult.win_rate * 100).toFixed(1)}%
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                            <span className="text-[9px] text-slate-400 block">PROFIT FACTOR</span>
-                            <span className={`font-bold text-sm ${backtestResult.profit_factor >= 1.5 ? 'text-emerald-400' : backtestResult.profit_factor >= 1.0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                              {backtestResult.profit_factor}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                            <span className="text-[9px] text-slate-400 block">SHARPE / SORTINO</span>
-                            <span className="font-bold text-sm text-indigo-400">
-                              {backtestResult.sharpe_ratio} / {backtestResult.sortino_ratio}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
-                            <span className="text-[9px] text-slate-400 block">MAX DRAWDOWN</span>
-                            <span className="font-bold text-sm text-rose-400">
-                              -{backtestResult.max_drawdown_percentage}%
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-900/40 p-2.5 rounded border border-slate-800/80 flex items-center justify-between text-xs">
-                          <span className="text-slate-400">GANANCIA NETA TOTAL:</span>
-                          <span className={`font-bold ${backtestResult.net_profit_usd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            ${backtestResult.net_profit_usd >= 0 ? '+' : ''}{backtestResult.net_profit_usd.toLocaleString()} USD
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
                       <div className="bg-[#0a0c14]/40 border border-[#191d35]/60 p-4 rounded-lg text-center text-xs text-slate-500 font-mono">
                         Selecciona el rango de días y haz clic en "EJECUTAR BACKTEST" para evaluar el algoritmo con datos históricos de mercado.
                       </div>

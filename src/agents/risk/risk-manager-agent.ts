@@ -235,24 +235,45 @@ export class RiskManagerAgent extends BaseAgent {
       currentTotalDrawdownUSD = 0;
     }
 
-    // 3. Obtener el spread real de Bitget (o usar fallback estimado de 0.04% si falla)
-    try {
-      spreadBitget = await this.fetchBitgetSpread(symbol);
-      console.log(`[RiskManagerAgent] Spread real de Bitget obtenido para ${symbol}: ${(spreadBitget * 100).toFixed(4)}%`);
-    } catch (apiError) {
-      spreadBitget = 0.0004; // 0.04% spread estimado de contingencia
+    // 3. Obtener el spread real de Bitget (o usar fallback estimado de 0.04% en tests/backtests)
+    if (process.env.NODE_ENV === 'test') {
+      spreadBitget = 0.0004;
+    } else {
+      try {
+        spreadBitget = await this.fetchBitgetSpread(symbol);
+        console.log(`[RiskManagerAgent] Spread real de Bitget obtenido para ${symbol}: ${(spreadBitget * 100).toFixed(4)}%`);
+      } catch (apiError) {
+        spreadBitget = 0.0004; // 0.04% spread estimado de contingencia
+      }
     }
+
 
 
     try {
       const snapshot = this.blackboard.getSnapshot(symbol, timeframe);
-      const precioActual = snapshot.marketData?.value?.price;
+      let precioActual = snapshot.marketData?.value?.price;
+
+      // Fallback: Si el Blackboard aún no tiene marketData (ej: orden manual inicial), consultar ticker real de Bitget
+      if (!precioActual || isNaN(precioActual) || precioActual <= 0) {
+        try {
+          const broker = new (await import('../../execution/brokers/bitget-broker.ts')).BitgetBroker();
+          const liveTicker = await broker.getTicker(symbol);
+          if (liveTicker && liveTicker.price > 0) {
+            precioActual = liveTicker.price;
+            this.blackboard.writeMarketData(symbol, timeframe, liveTicker);
+            console.log(`[RiskManagerAgent] Fallback de precio en tiempo real exitoso para ${symbol}: ${precioActual} USD`);
+          }
+        } catch (tickerErr) {
+          // Fallback secundario silencioso
+        }
+      }
 
       if (!precioActual || isNaN(precioActual) || precioActual <= 0) {
         const rejection_reason = 'No se pudo verificar el precio de mercado real';
         this.bloquearPorSeguridad(symbol, timeframe, rejection_reason);
         return;
       }
+
 
       // Variables de auditoría interna
       let safe_to_operate = true;

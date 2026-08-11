@@ -1,0 +1,774 @@
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/Jony/Documents/atlas-ai-trading[39m
+
+[90mstdout[2m | tests/positions/position-state-machine.test.ts[2m > [22m[2mPositionStateMachine Unit Tests[2m > [22m[2mdebe permitir transiciones válidas IDLE -> OPENING -> OPEN -> CLOSING -> CLOSED
+[22m[39m[PositionStateMachine] Transición de estado: IDLE -> OPENING (Normal)
+[PositionStateMachine] Transición de estado: OPENING -> OPEN (Normal)
+[PositionStateMachine] Transición de estado: OPEN -> CLOSING (Normal)
+[PositionStateMachine] Transición de estado: CLOSING -> CLOSED (Normal)
+
+ [32m✓[39m tests/positions/position-state-machine.test.ts[2m > [22mPositionStateMachine Unit Tests[2m > [22mdebe iniciar en estado IDLE[32m 1[2mms[22m[39m
+ [32m✓[39m tests/positions/position-state-machine.test.ts[2m > [22mPositionStateMachine Unit Tests[2m > [22mdebe permitir transiciones válidas IDLE -> OPENING -> OPEN -> CLOSING -> CLOSED[32m 1[2mms[22m[39m
+ [32m✓[39m tests/positions/position-state-machine.test.ts[2m > [22mPositionStateMachine Unit Tests[2m > [22mdebe rechazar transiciones inválidas (ej. IDLE -> CLOSED)[32m 1[2mms[22m[39m
+[90mstdout[2m | tests/broker/bitget-broker.test.ts[2m > [22m[2mBitgetBroker Unit Tests[2m > [22m[2mgetPosition debe filtrar estrictamente por el símbolo solicitado (C05)
+[22m[39m[BitgetBroker] [GET /api/v2/mix/position/all-position] Recuperando posición activa (Demo) para: SETHSUSDT
+
+[90mstdout[2m | tests/broker/bitget-broker.test.ts[2m > [22m[2mBitgetBroker Unit Tests[2m > [22m[2mgetPosition debe filtrar estrictamente por el símbolo solicitado (C05)
+[22m[39m[BitgetBroker] [GET /api/v2/mix/position/all-position] Recuperando posición activa (Demo) para: SBTCSUSDT
+
+ [32m✓[39m tests/broker/bitget-broker.test.ts[2m > [22mBitgetBroker Unit Tests[2m > [22mgetMarketPrice debe fallar cerrado (fail closed) cuando la API de Bitget no responde[32m 3[2mms[22m[39m
+ [32m✓[39m tests/broker/bitget-broker.test.ts[2m > [22mBitgetBroker Unit Tests[2m > [22mgetPosition debe filtrar estrictamente por el símbolo solicitado (C05)[32m 2[2mms[22m[39m
+[90mstdout[2m | tests/orders/order-router.test.ts[2m > [22m[2mOrderRouter Unit Tests[2m > [22m[2mdebe ignorar señales duplicadas por idempotencia
+[22m[39m[OrderRouter] Verificando balance de margen disponible para USDT en Bitget...
+
+[90mstdout[2m | tests/orders/concurrency-signals.test.ts[2m > [22m[2mCRITICAL 8 — 10 Concurrent Signal Dispatch Mutex Test[2m > [22m[2m10 llamadas simultáneas a la misma señal deben producir exactamente 1 orden lógica despachada
+[22m[39m[OrderRouter] Verificando balance de margen disponible para USDT en Bitget...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Esperando liberación de lock de despacho para BTC/USDT...
+[OrderRouter] Control de Margen: Balance USDT Disponible: $10.000 USD | Margen Requerido (con apalancamiento 10x): $50 USD
+[OrderRouter] Despachando a OrderManager [signalId: BTC/USDT:15m:1750000000000, cycleId: cycle_concurrent_test]...
+
+[90mstdout[2m | tests/orders/order-router.test.ts[2m > [22m[2mOrderRouter Unit Tests[2m > [22m[2mdebe ignorar señales duplicadas por idempotencia
+[22m[39m[OrderRouter] Control de Margen: Balance USDT Disponible: $1000 USD | Margen Requerido (con apalancamiento 10x): $50 USD
+[OrderRouter] Despachando a OrderManager [signalId: BTC/USDT:15m:1786436292394, cycleId: cycle_1786436292395]...
+
+[90mstdout[2m | tests/orders/order-no-duplicate-on-network-timeout.test.ts[2m > [22m[2mCRITICAL 1 — Order Idempotency & Network Timeout (No Duplication)[2m > [22m[2mdebe mantener exactamente el mismo clientOid y consultar al exchange tras timeout de red sin duplicar la orden
+[22m[39m[OrderManager] Intención recuperada de memoria para signalId BTC/USDT:15m:1700000000000 [clientOid: atlas_btcusdt_cycle_test_1001_1786436292391]
+
+[90mstdout[2m | tests/orders/order-no-duplicate-on-network-timeout.test.ts[2m > [22m[2mCRITICAL 1 — Order Idempotency & Network Timeout (No Duplication)[2m > [22m[2mdebe mantener exactamente el mismo clientOid y consultar al exchange tras timeout de red sin duplicar la orden
+[22m[39m[OrderManager] Despachando a Broker con clientOid inmutable: atlas_btcusdt_cycle_test_1001_1786436292391
+
+[90mstdout[2m | tests/orders/order-no-duplicate-on-network-timeout.test.ts[2m > [22m[2mCRITICAL 1 — Order Idempotency & Network Timeout (No Duplication)[2m > [22m[2mdebe mantener exactamente el mismo clientOid y consultar al exchange tras timeout de red sin duplicar la orden
+[22m[39m[OrderManager] Reconciliación post-timeout EXITOSA. Orden fue aceptada por el exchange [orderId: bitget_exchange_999888]
+
+[90mstdout[2m | tests/orders/order-no-duplicate-on-network-timeout.test.ts[2m > [22m[2mCRITICAL 1 — Order Idempotency & Network Timeout (No Duplication)[2m > [22m[2mdebe mantener exactamente el mismo clientOid y consultar al exchange tras timeout de red sin duplicar la orden
+[22m[39m[OrderManager] Intención recuperada de memoria para signalId BTC/USDT:15m:1700000000000 [clientOid: atlas_btcusdt_cycle_test_1001_1786436292391]
+
+ [32m✓[39m tests/orders/order-no-duplicate-on-network-timeout.test.ts[2m > [22mCRITICAL 1 — Order Idempotency & Network Timeout (No Duplication)[2m > [22mdebe mantener exactamente el mismo clientOid y consultar al exchange tras timeout de red sin duplicar la orden[32m 30[2mms[22m[39m
+[90mstdout[2m | tests/orders/concurrency-signals.test.ts[2m > [22m[2mCRITICAL 8 — 10 Concurrent Signal Dispatch Mutex Test[2m > [22m[2m10 llamadas simultáneas a la misma señal deben producir exactamente 1 orden lógica despachada
+[22m[39m[OrderManager] Despachando a Broker con clientOid inmutable: atlas_btcusdt_cycle_concurrent_test_1786436292407
+
+[90mstdout[2m | tests/orders/order-router.test.ts[2m > [22m[2mOrderRouter Unit Tests[2m > [22m[2mdebe ignorar señales duplicadas por idempotencia
+[22m[39m[OrderManager] Despachando a Broker con clientOid inmutable: atlas_btcusdt_cycle_1786436292395_1786436292410
+
+[90mstdout[2m | tests/orders/concurrency-signals.test.ts[2m > [22m[2mCRITICAL 8 — 10 Concurrent Signal Dispatch Mutex Test[2m > [22m[2m10 llamadas simultáneas a la misma señal deben producir exactamente 1 orden lógica despachada
+[22m[39m[OrderRouter] ¡Ejecución EXITOSA! OrderID: bitget_concurrent_123 | ClientOid: atlas_btcusdt_cycle_concurrent_test_1786436292407
+
+[90mstdout[2m | tests/orders/order-router.test.ts[2m > [22m[2mOrderRouter Unit Tests[2m > [22m[2mdebe ignorar señales duplicadas por idempotencia
+[22m[39m[OrderRouter] ¡Ejecución EXITOSA! OrderID: 123456 | ClientOid: undefined
+
+ [32m✓[39m tests/orders/order-router.test.ts[2m > [22mOrderRouter Unit Tests[2m > [22mdebe abortar si safe_to_operate es false[32m 1[2mms[22m[39m
+ [32m✓[39m tests/orders/order-router.test.ts[2m > [22mOrderRouter Unit Tests[2m > [22mdebe ignorar señales duplicadas por idempotencia[32m 36[2mms[22m[39m
+ [32m✓[39m tests/orders/concurrency-signals.test.ts[2m > [22mCRITICAL 8 — 10 Concurrent Signal Dispatch Mutex Test[2m > [22m10 llamadas simultáneas a la misma señal deben producir exactamente 1 orden lógica despachada[32m 38[2mms[22m[39m
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe abortar con error Fail-Closed si se proveen menos de 10 velas históricas
+[22m[39m[BacktestEngine] Iniciando simulación determinista para BTC/USDT desde 10/8/2026, 10:18:12 hasta 11/8/2026, 10:18:12
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[BacktestEngine] Iniciando simulación determinista para BTC/USDT desde 14/11/2023, 23:13:20 hasta 15/11/2023, 6:43:20
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[BacktestEngine] Procesando 30 velas históricas determinísticamente sin sesgo de anticipación...
+[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Fetching latest candles from Bitget API for BTC/USDT en 15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39mAgent [TechnicalAnalyst] registered successfully inside Orchestrator. Loop: Fast
+Agent [OrderFlow] registered successfully inside Orchestrator. Loop: Fast
+Agent [Correlation] registered successfully inside Orchestrator. Loop: Fast
+Agent [Liquidation] registered successfully inside Orchestrator. Loop: Slow
+Agent [Divergence] registered successfully inside Orchestrator. Loop: Fast
+Agent [Sentiment] registered successfully inside Orchestrator. Loop: Slow
+Agent [News] registered successfully inside Orchestrator. Loop: Slow
+Agent [OnChain] registered successfully inside Orchestrator. Loop: Slow
+Agent [Learning] registered successfully inside Orchestrator. Loop: Slow
+Agent [RiskManager] registered successfully inside Orchestrator. Loop: Fast
+Agent [Supervisor] registered successfully inside Orchestrator. Loop: Slow
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[ReconciliationEngine] Acoplando sensores de conciliación a los flujos del WebSocket...
+[EngineScheduler] [STARTUP] Inicializando motor... Estado: STARTING
+[EngineScheduler] [STARTUP] Ejecutando reconciliación obligatoria de arranque para BTC/USDT... Estado: RECONCILING
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[OrderManager] Buscando órdenes no resueltas en DB para reconciliación...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[EngineScheduler] [STARTUP] Reconciliación completada con éxito. Estado: READY
+[EngineScheduler] Arrancando ciclo (PAPER/TESTNET) para BTC/USDT (15m) cada 60000ms. Estado: TRADING
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[INFO] [Orchestrator] Triggering multi-agent trade cycle for BTC/USDT (15m) [cycleId: cycle_1786436292577]
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[DEBUG] [Orchestrator] Executing Fast-Loop quantitative pipeline (5 agents)...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Fetching latest candles from Bitget API for BTC/USDT en 15m...
+[OrderFlowAgent] Analizando microestructura y flujo de órdenes reales para BTC/USDT en 15m...
+[CorrelationAgent] Analizando correlaciones macro reales para BTC/USDT:15m...
+[DivergenceAgent] Escaneando divergencias matemáticas reales para BTC/USDT:15m...
+[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/security/risk-bypass.test.ts[2m > [22m[2mCRITICAL 3 — Elimination of Risk Manager Bypass[2m > [22m[2mdebe rechazar /api/v1/engine/test-order con 403 Forbidden en entorno de producción
+[22m[39mAgent [TechnicalAnalyst] registered successfully inside Orchestrator. Loop: Fast
+Agent [OrderFlow] registered successfully inside Orchestrator. Loop: Fast
+Agent [Correlation] registered successfully inside Orchestrator. Loop: Fast
+Agent [Liquidation] registered successfully inside Orchestrator. Loop: Slow
+Agent [Divergence] registered successfully inside Orchestrator. Loop: Fast
+Agent [Sentiment] registered successfully inside Orchestrator. Loop: Slow
+Agent [News] registered successfully inside Orchestrator. Loop: Slow
+Agent [OnChain] registered successfully inside Orchestrator. Loop: Slow
+Agent [Learning] registered successfully inside Orchestrator. Loop: Slow
+Agent [RiskManager] registered successfully inside Orchestrator. Loop: Fast
+Agent [Supervisor] registered successfully inside Orchestrator. Loop: Slow
+
+{"level":30,"time":1786436292636,"pid":20348,"hostname":"Jony","reqId":"req-1","req":{"method":"POST","url":"/api/v1/engine/test-order","hostname":"localhost","remoteAddress":"127.0.0.1"},"msg":"incoming request"}
+ [32m✓[39m tests/backtest/engine.test.ts[2m > [22mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22mdebe abortar con error Fail-Closed si se proveen menos de 10 velas históricas[32m 12[2mms[22m[39m
+{"level":30,"time":1786436292648,"pid":20348,"hostname":"Jony","reqId":"req-1","req":{"method":"POST","url":"/api/v1/engine/test-order","hostname":"localhost","remoteAddress":"127.0.0.1"},"msg":"incoming request"}
+{"level":30,"time":1786436292640,"pid":20348,"hostname":"Jony","reqId":"req-1","res":{"statusCode":403},"responseTime":3.307899999999904,"msg":"request completed"}
+{"level":30,"time":1786436292651,"pid":20348,"hostname":"Jony","reqId":"req-1","res":{"statusCode":401},"responseTime":2.4506000000000085,"msg":"request completed"}
+ [32m✓[39m tests/security/risk-bypass.test.ts[2m > [22mCRITICAL 3 — Elimination of Risk Manager Bypass[2m > [22mdebe rechazar /api/v1/engine/test-order con 403 Forbidden en entorno de producción[32m 71[2mms[22m[39m
+ [32m✓[39m tests/security/risk-bypass.test.ts[2m > [22mCRITICAL 3 — Elimination of Risk Manager Bypass[2m > [22mdebe solicitar autenticación y no permitir bypass sin token válido[32m 10[2mms[22m[39m
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[CorrelationAgent] Escritura en Blackboard finalizada para BTC/USDT:15m con score real: 6
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.33% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.33% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.33% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.33% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[OrderFlowAgent] Registro exitoso en Blackboard para BTC/USDT:15m con score real: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[DivergenceAgent] Pizarra de divergencias reales actualizada para BTC/USDT:15m con score: 50
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.33% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[DEBUG] [Orchestrator] Executing Slow-Loop cognitive pipeline (5 agents)...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[LiquidationAgent] Analizando liquidez magnética y liquidación en tiempo real para BTC/USDT:15m...
+[SentimentAgent] Analizando psicología de masas para BTC/USDT:15m...
+[SentimentAgent] Cache expirada o vacía. Solicitando datos reales al endpoint de Fear & Greed Index con timeout de 5s...
+[NewsAgent] Analizando feeds de noticias para BTC/USDT:15m...
+[NewsAgent] Intentando obtener noticias reales desde el RSS de Cointelegraph...
+[OnChainAgent] Analizando métricas on-chain para BTC/USDT:15m...
+[OnChainAgent] Consultando blockchain.info para transacciones de 24h de BTC...
+[LearningAgent] Ejecutando optimización Bayesiana de pesos para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[LearningAgent] Calibración Bayesiana registrada con éxito en Blackboard para BTC/USDT:15m.
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Iniciando análisis real para BTC/USDT en 15m
+[TechnicalAnalystAgent] Velas obtenidas desde cache de memoria para BTC/USDT en 15m
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[TechnicalAnalystAgent] Variable GEMINI_API_KEY no detectada. Operando exclusivamente en modo cuantitativo determinista.
+[TechnicalAnalystAgent] Escritura en Blackboard exitosa para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Iniciando firewall matemático determinista para BTC/USDT:15m...
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[RiskManagerAgent] Firewall finalizado. Safe to operate: false, Score: 0
+
+[90mstdout[2m | tests/backtest/engine.test.ts[2m > [22m[2mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22m[2mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 0.32% (Extrema: false)
+[SupervisorAgent] Agente analista offline o inactivo: OrderFlow. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Liquidation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: OnChain. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Correlation. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Divergence. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: Sentiment. Re-distribuyendo peso.
+[SupervisorAgent] Agente analista offline o inactivo: News. Re-distribuyendo peso.
+[SupervisorAgent] Algoritmo matemático completado. Score: 0, Decisión: HOLD, Confianza: 0.85
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 0
+
+ [32m✓[39m tests/backtest/engine.test.ts[2m > [22mCRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead Bias[2m > [22mdebe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales[33m 359[2mms[22m[39m
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[NewsAgent] Ingesta exitosa: 5 artículos obtenidos de Cointelegraph.
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[NewsAgent] GEMINI_API_KEY no configurado. Iniciando fallback directo...
+[NewsAgent] Ejecutando análisis determinista local de noticias reales (Modo Fallback)...
+[NewsAgent] Blackboard actualizado con éxito para BTC/USDT:15m con score: 0
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[OnChainAgent] Consultando blockchain.info para el tamaño del mempool de BTC...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[LiquidationAgent] GEMINI_API_KEY no configurado. Ejecutando fallback directo...
+[LiquidationAgent] Ejecutando diagnóstico local de piscinas de liquidación real (Modo Fallback)...
+[LiquidationAgent] Registro exitoso en Blackboard para BTC/USDT:15m con score real: 10
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[SentimentAgent] Datos obtenidos con éxito y cacheados. Valor: 29, Clasificación: Fear
+[SentimentAgent] GEMINI_API_KEY no configurado. Iniciando fallback directo...
+[SentimentAgent] Ejecutando análisis heurístico local de psicología de masas (Fallback)...
+[SentimentAgent] Blackboard actualizado con éxito para BTC/USDT:15m con score: -42
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[OnChainAgent] Blackboard actualizado con éxito para BTC/USDT:15m con score: 0 (DataSource: UNAVAILABLE)
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[INFO] [Orchestrator] Triggering Supervisor Agent for consensus and trade evaluation...
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[SupervisorAgent] Iniciando supervisión y ponderación dinámica para BTC/USDT:15m...
+[SupervisorAgent] Volatilidad detectada: 3.08% (Extrema: false)
+[SupervisorAgent] Aplicando recalibración Bayesiana enviada por LearningAgent: {
+  TechnicalAnalyst: [33m0.8[39m,
+  OrderFlow: [33m0.8[39m,
+  Correlation: [33m1[39m,
+  Liquidation: [33m1[39m,
+  Divergence: [33m1.2[39m,
+  Sentiment: [33m1[39m
+}
+[SupervisorAgent] Algoritmo matemático completado. Score: 7, Decisión: HOLD, Confianza: 0.8594
+[SupervisorAgent] Escritura final en Blackboard completada para BTC/USDT:15m. Decisión: HOLD, Score: 7
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[INFO] [Orchestrator] Multi-agent trade cycle completed for BTC/USDT in 749ms [cycleId: cycle_1786436292577].
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[DEBUG] [EngineScheduler] RiskManager bloqueó la operación: El Agente Supervisor no ha emitido una señal de entrada (HOLD)..
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[EngineScheduler] Ciclo completado en 751ms.
+
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente
+[22m[39m[EngineScheduler] Motor detenido.
+
+ [32m✓[39m tests/core/startup-reconciliation-flow.test.ts[2m > [22mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22mdebe completar el flujo STARTING -> RECONCILING -> READY -> TRADING al conciliar exitosamente[33m 764[2mms[22m[39m
+[90mstdout[2m | tests/core/startup-reconciliation-flow.test.ts[2m > [22m[2mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22m[2mdebe entrar en FAILED_SAFE y bloquear TRADING si la reconciliación falla
+[22m[39m[EngineScheduler] [STARTUP] Inicializando motor... Estado: STARTING
+[EngineScheduler] [STARTUP] Ejecutando reconciliación obligatoria de arranque para BTC/USDT... Estado: RECONCILING
+
+ [32m✓[39m tests/core/startup-reconciliation-flow.test.ts[2m > [22mCRITICAL 2 — Startup Reconciliation & Engine State Machine[2m > [22mdebe entrar en FAILED_SAFE y bloquear TRADING si la reconciliación falla[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m      Tests [22m [1m[32m15 passed[39m[22m[90m (15)[39m
+[2m   Start at [22m 10:18:11
+[2m   Duration [22m 1.68s[2m (transform 497ms, setup 0ms, collect 3.70s, tests 1.33s, environment 1ms, prepare 577ms)[22m
+

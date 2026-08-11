@@ -15,8 +15,11 @@ export interface OrderRequest {
   tamano: number; // Cantidad de unidades o volumen en USD
   stopLoss?: number; // Nivel de salida por pérdidas
   takeProfit?: number; // Nivel de salida por beneficios
+  leverage?: number; // Apalancamiento objetivo
+  clientOid?: string; // Identificador determinista persistido de orden cliente
   timestamp: number;
 }
+
 
 export interface ExecutionResult {
   exitoso: boolean;

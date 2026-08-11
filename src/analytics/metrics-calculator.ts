@@ -164,13 +164,18 @@ export class MetricsCalculator {
 
       // 4. Cálculos Financieros Estándar
       const winRate = winningTradesCount / totalTrades;
-      const profitFactor = totalLossUSD > 0 ? Number((totalProfitUSD / totalLossUSD).toFixed(4)) : Number(totalProfitUSD.toFixed(4));
+      const profitFactor = totalLossUSD > 0 
+        ? Number((totalProfitUSD / totalLossUSD).toFixed(4)) 
+        : (totalProfitUSD > 0 ? 999.0 : 0); // Profit Factor es infinito técnico si no hay pérdidas
       const netProfitUSD = totalProfitUSD - totalLossUSD;
 
       const averageWinUSD = winningTradesCount > 0 ? Number((totalProfitUSD / winningTradesCount).toFixed(4)) : 0;
       const averageLossUSD = losingTradesCount > 0 ? Number((totalLossUSD / losingTradesCount).toFixed(4)) : 0;
 
-      // 5. Ratio de Sharpe (Asumiendo Risk-Free Rate = 0%)
+      // Factor de anualización de criptomonedas (365 días al año)
+      const annualizationFactor = Math.sqrt(365);
+
+      // 5. Ratio de Sharpe Anualizado (Asumiendo Risk-Free Rate = 0%)
       let sharpeRatio = 0;
       if (totalTrades > 1) {
         // Promedio de retornos (media)
@@ -182,32 +187,29 @@ export class MetricsCalculator {
         const desviacionEstandar = Math.sqrt(varianzaMuestral);
 
         if (desviacionEstandar > 0) {
-          sharpeRatio = Number((mediaRetornos / desviacionEstandar).toFixed(4));
+          sharpeRatio = Number(((mediaRetornos / desviacionEstandar) * annualizationFactor).toFixed(4));
         }
       }
 
-      // 6. Ratio de Sortino (Evaluando sólo Downside Deviation)
+      // 6. Ratio de Sortino Anualizado (Evaluando sólo Downside Deviation)
       let sortinoRatio = 0;
       if (totalTrades > 1) {
         const mediaRetornos = retornosPorcentaje.reduce((acc, val) => acc + val, 0) / totalTrades;
         
         // Downside Deviation (desviación de retornos negativos, MAR = 0)
-        // Se penalizan solo los retornos menores a 0
         const retornosNegativosCuadrados = retornosPorcentaje.map(val => val < 0 ? Math.pow(val, 2) : 0);
         const sumaRetornosNegativosCuadrados = retornosNegativosCuadrados.reduce((acc, val) => acc + val, 0);
         
-        // El denominador usa N como divisor estándar para downside deviation
         const varianzaAbajo = sumaRetornosNegativosCuadrados / totalTrades;
         const desviacionAbajo = Math.sqrt(varianzaAbajo);
 
         if (desviacionAbajo > 0) {
-          sortinoRatio = Number((mediaRetornos / desviacionAbajo).toFixed(4));
+          sortinoRatio = Number(((mediaRetornos / desviacionAbajo) * annualizationFactor).toFixed(4));
         } else if (mediaRetornos > 0) {
-          // Si no hay pérdidas (desviación abajo es 0) pero hay retornos positivos, 
-          // el Sortino es excepcionalmente alto o infinito técnico
-          sortinoRatio = Number((mediaRetornos * 10).toFixed(4)); // Valor acotado de alta calidad
+          sortinoRatio = 999.0; // Infinito técnico acotado
         }
       }
+
 
       const report: PerformanceReport = {
         sharpe_ratio: sharpeRatio,

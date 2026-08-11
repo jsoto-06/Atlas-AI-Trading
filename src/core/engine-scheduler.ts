@@ -14,16 +14,27 @@ import { SentimentAgent } from '../agents/sentiment/sentiment-agent.ts';
 import { LearningAgent } from '../agents/learning/learning-agent.ts';
 import { RiskManagerAgent } from '../agents/risk/risk-manager-agent.ts';
 import { SupervisorAgent } from '../agents/supervisor/supervisor-agent.ts';
+import { NewsAgent } from '../agents/news/news-agent.ts';
+import { OnChainAgent } from '../agents/onchain/onchain-agent.ts';
 import { OrderRouter } from '../execution/order-router.ts';
 import { BitgetBroker } from '../execution/brokers/bitget-broker.ts';
+import { ReconciliationEngine } from '../execution/reconciliation-engine.ts';
 import { mapSymbol, getProductType } from '../execution/brokers/bitget-utils.ts';
 import { RiskManagerAnalystOutput } from '../agents/risk/types.ts';
 import { MarketStateSnapshot } from '../types.ts';
 import { db } from '../db/index.ts';
 import { auditLogs } from '../db/schema.ts';
 
+export type EngineLifecycleState =
+  | 'STOPPED'
+  | 'STARTING'
+  | 'RECONCILING'
+  | 'READY'
+  | 'TRADING'
+  | 'FAILED_SAFE';
+
 /**
- * EngineScheduler — Ciclo de Producción con Flujo de Órdenes, Correlaciones, Liquidación, Divergencias, Sentimiento y Aprendizaje Bayesiano.
+ * EngineScheduler — Ciclo de Producción con Flujo de Órdenes, Correlaciones, Liquidación, Divergencias, Sentimiento, Noticias, On-Chain y Aprendizaje Bayesiano.
  */
 export class EngineScheduler {
   private static instance: EngineScheduler | null = null;
@@ -35,6 +46,7 @@ export class EngineScheduler {
 
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private state: EngineLifecycleState = 'STOPPED';
   private cycleInProgress = false;
 
   private symbol = 'BTC/USDT';
@@ -61,7 +73,7 @@ export class EngineScheduler {
   }
 
   /**
-   * Registra los agentes activos en la producción (TechnicalAnalyst, OrderFlow, Correlation, Liquidation, Divergence, Sentiment, Learning, RiskManager, Supervisor).
+   * Registra los 11 agentes activos en el pipeline del orquestador.
    */
   private registerActiveAgents(): void {
     this.orchestrator.registerAgent(new TechnicalAnalystAgent());
@@ -70,6 +82,8 @@ export class EngineScheduler {
     this.orchestrator.registerAgent(new LiquidationAgent());
     this.orchestrator.registerAgent(new DivergenceAgent());
     this.orchestrator.registerAgent(new SentimentAgent());
+    this.orchestrator.registerAgent(new NewsAgent());
+    this.orchestrator.registerAgent(new OnChainAgent());
     this.orchestrator.registerAgent(new LearningAgent());
     this.orchestrator.registerAgent(new RiskManagerAgent());
     this.orchestrator.registerAgent(new SupervisorAgent());
@@ -79,6 +93,7 @@ export class EngineScheduler {
     const modoReal = process.env.BITGET_MODO_REAL === 'true';
     return {
       running: this.running,
+      state: this.state,
       modo: modoReal ? 'REAL' : 'PAPER/TESTNET',
       symbol: this.symbol,
       timeframe: this.timeframe,
@@ -87,72 +102,129 @@ export class EngineScheduler {
       lastCycleError: this.lastCycleError,
       totalCycles: this.totalCycles,
       totalDispatches: this.totalDispatches,
-      registeredAgents: ['TechnicalAnalyst', 'OrderFlow', 'Correlation', 'Liquidation', 'Divergence', 'Sentiment', 'Learning', 'RiskManager', 'Supervisor'],
+      registeredAgents: [
+        'TechnicalAnalyst',
+        'OrderFlow',
+        'Correlation',
+        'Liquidation',
+        'Divergence',
+        'Sentiment',
+        'News',
+        'OnChain',
+        'Learning',
+        'RiskManager',
+        'Supervisor',
+      ],
     };
   }
 
   /**
-   * Arranca el bucle. Guarda de seguridad: si BITGET_MODO_REAL=true, exige
-   * confirmLive=true explícito en la llamada. Esto obliga a que operar en real
-   * sea una decisión consciente y no un accidente de configuración por defecto.
+   * Arranca el bucle tras la reconciliación inicial obligatoria.
+   * Flujo de estados: STOPPED -> STARTING -> RECONCILING -> READY -> TRADING (o FAILED_SAFE).
    */
-  public start(params: {
+  public async start(params: {
     symbol?: string;
     timeframe?: string;
     intervalMs?: number;
     confirmLive?: boolean;
-  }): { ok: boolean; message: string } {
+  }): Promise<{ ok: boolean; message: string; state: EngineLifecycleState }> {
     const modoReal = process.env.BITGET_MODO_REAL === 'true';
 
     if (modoReal && params.confirmLive !== true) {
+      this.state = 'FAILED_SAFE';
       return {
         ok: false,
         message:
           'BITGET_MODO_REAL=true pero no se recibió confirmLive=true. ' +
-          'Arranque bloqueado por seguridad. El plan acordado exige semanas en paper/testnet antes de operar en real.',
+          'Arranque bloqueado por seguridad.',
+        state: this.state,
       };
     }
 
-    if (this.running) {
-      return { ok: false, message: 'El motor ya está en ejecución.' };
+    if (this.running && this.state === 'TRADING') {
+      return { ok: false, message: 'El motor ya está en ejecución.', state: this.state };
     }
 
     this.symbol = params.symbol || this.symbol;
     this.timeframe = params.timeframe || this.timeframe;
     this.intervalMs = params.intervalMs || this.intervalMs;
-
-    this.running = true;
     this.lastCycleError = null;
 
-    console.log(
-      `[EngineScheduler] Arrancando ciclo mínimo (${modoReal ? 'REAL' : 'PAPER/TESTNET'}) ` +
-        `para ${this.symbol} (${this.timeframe}) cada ${this.intervalMs}ms.`
-    );
+    // Transición de estados de arranque
+    this.state = 'STARTING';
+    console.log(`[EngineScheduler] [STARTUP] Inicializando motor... Estado: ${this.state}`);
+    this.state = 'RECONCILING';
+    console.log(`[EngineScheduler] [STARTUP] Ejecutando reconciliación obligatoria de arranque para ${this.symbol}... Estado: ${this.state}`);
 
-    // Disparar un primer ciclo inmediatamente, sin esperar al primer intervalo
-    this.runCycle();
-    this.intervalHandle = setInterval(() => this.runCycle(), this.intervalMs);
+    try {
+      // 1. Reconciliación de posiciones/trades de arranque entre Exchange y DB
+      const reconciliationEngine = ReconciliationEngine.getInstance();
+      const reconcileOk = await reconciliationEngine.reconcileOnStartup(this.broker, this.symbol);
 
-    return { ok: true, message: `Motor arrancado en modo ${modoReal ? 'REAL' : 'PAPER/TESTNET'}.` };
+      if (!reconcileOk) {
+        this.state = 'FAILED_SAFE';
+        this.running = false;
+        console.error('[EngineScheduler] [FAILED_SAFE] Falló la reconciliación de arranque. Motor bloqueado.');
+        return {
+          ok: false,
+          message: 'Fallo crítico en la reconciliación de arranque. Motor en FAILED_SAFE. Trading bloqueado.',
+          state: this.state,
+        };
+      }
+
+      // 2. Reconciliación de órdenes no resueltas en OrderManager
+      await this.orderRouter.getOrderManager().loadAndResolveUnresolvedOrders();
+
+      // Transición a READY y luego TRADING
+      this.state = 'READY';
+      console.log(`[EngineScheduler] [STARTUP] Reconciliación completada con éxito. Estado: ${this.state}`);
+
+      this.running = true;
+      this.state = 'TRADING';
+
+      console.log(
+        `[EngineScheduler] Arrancando ciclo (${modoReal ? 'REAL' : 'PAPER/TESTNET'}) ` +
+          `para ${this.symbol} (${this.timeframe}) cada ${this.intervalMs}ms. Estado: ${this.state}`
+      );
+
+      // Disparar un primer ciclo inmediatamente
+      await this.runCycle();
+      this.intervalHandle = setInterval(() => this.runCycle(), this.intervalMs);
+
+      return {
+        ok: true,
+        message: `Motor arrancado y reconciliado con éxito en modo ${modoReal ? 'REAL' : 'PAPER/TESTNET'}.`,
+        state: this.state,
+      };
+    } catch (startupError: any) {
+      this.state = 'FAILED_SAFE';
+      this.running = false;
+      const msg = startupError?.message || String(startupError);
+      console.error(`[EngineScheduler] [FAILED_SAFE] Excepción crítica durante el arranque: ${msg}`);
+      return {
+        ok: false,
+        message: `Fallo durante el arranque: ${msg}. Motor en FAILED_SAFE.`,
+        state: this.state,
+      };
+    }
   }
 
-  public stop(): { ok: boolean; message: string } {
-    if (!this.running) {
-      return { ok: false, message: 'El motor no está en ejecución.' };
+  public stop(): { ok: boolean; message: string; state: EngineLifecycleState } {
+    if (!this.running && this.state === 'STOPPED') {
+      return { ok: false, message: 'El motor no está en ejecución.', state: this.state };
     }
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
     }
     this.running = false;
+    this.state = 'STOPPED';
     console.log('[EngineScheduler] Motor detenido.');
-    return { ok: true, message: 'Motor detenido.' };
+    return { ok: true, message: 'Motor detenido.', state: this.state };
   }
 
   /**
-   * Obtiene un ticker público de Bitget para construir el MarketStateSnapshot
-   * que el Orchestrator necesita para iniciar el ciclo de agentes.
-   * FIX H03: Añadido AbortSignal.timeout(5000) para evitar colgado indeterminado en fetch
+   * Obtiene un ticker público de Bitget para construir el MarketStateSnapshot.
    */
   private async fetchMarketSnapshot(symbol: string): Promise<MarketStateSnapshot> {
     const mappedSymbol = mapSymbol(symbol);
@@ -190,23 +262,27 @@ export class EngineScheduler {
   }
 
   /**
-   * Un ciclo completo: dato de mercado -> agentes (Technical, RiskManager, Supervisor) ->
-   * decisión -> despacho de orden si procede. Esta función es el único lugar del sistema
-   * que llama a OrderRouter.dispatchOrder.
+   * Un ciclo completo: dato de mercado -> agentes -> decisión -> despacho de orden si procede.
    */
   private async runCycle(): Promise<void> {
+    if (this.state !== 'TRADING') {
+      console.warn(`[EngineScheduler] Intento de ejecutar ciclo con motor fuera de estado TRADING (Estado actual: ${this.state}). Omitiendo.`);
+      return;
+    }
+
     if (this.cycleInProgress) {
       console.warn('[EngineScheduler] Ciclo anterior aún en curso. Se omite este disparo.');
       return;
     }
     this.cycleInProgress = true;
     const cycleStart = Date.now();
+    const cycleId = `cycle_${Date.now()}`;
 
     try {
       const marketTick = await this.fetchMarketSnapshot(this.symbol);
 
-      // 1. Ejecutar el pipeline real de agentes (Technical + RiskManager + Supervisor)
-      await this.orchestrator.triggerWorkflow(this.symbol, this.timeframe, marketTick);
+      // 1. Ejecutar el pipeline real de agentes
+      await this.orchestrator.triggerWorkflow(this.symbol, this.timeframe, marketTick, cycleId);
 
       // 2. Leer el resultado del RiskManager desde el Blackboard
       const snapshot = this.blackboard.getSnapshot(this.symbol, this.timeframe);
@@ -222,9 +298,8 @@ export class EngineScheduler {
       const riskOutput = riskAssessment.value.data as RiskManagerAnalystOutput;
 
       // 3. Despachar SOLO si el firewall de riesgo lo autoriza.
-      //    dispatchOrder ya valida internamente contra la decisión del Supervisor en el Blackboard.
       if (riskOutput.safe_to_operate) {
-        const resultado = await this.orderRouter.dispatchOrder(riskOutput);
+        const resultado = await this.orderRouter.dispatchOrder(riskOutput, 10, cycleId);
         this.totalDispatches += 1;
         await this.logCycle(
           resultado.exitoso ? 'INFO' : 'WARN',

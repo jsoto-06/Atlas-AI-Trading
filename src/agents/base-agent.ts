@@ -25,27 +25,43 @@ export abstract class BaseAgent {
    * Reads state from the Blackboard, runs algorithms or LLM instructions,
    * and commits structured JSON results back to the Blackboard.
    */
-  public abstract analyze(symbol: string, timeframe: string): Promise<void>;
+  public abstract analyze(symbol: string, timeframe: string, cycleId?: string, signal?: AbortSignal): Promise<void>;
 
   /**
-   * Safe execution wrapper that handles isolated error recovery and writes logs.
+   * Safe execution wrapper that handles isolated error recovery, cycleId checking, abort signal propagation, and logs.
    */
-  public async execute(symbol: string, timeframe: string): Promise<void> {
+  public async execute(symbol: string, timeframe: string, cycleId?: string, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      console.warn(`[Agent ${this.name}] Aborting execution prior to start: AbortSignal triggered.`);
+      return;
+    }
+
     const startTime = Date.now();
     try {
-      await this.analyze(symbol, timeframe);
+      await this.analyze(symbol, timeframe, cycleId, signal);
     } catch (error) {
+      if (signal?.aborted) {
+        console.warn(`[Agent ${this.name}] Aborted during execution for cycle ${cycleId}.`);
+        return;
+      }
+
       console.error(`Agent [${this.name}] failed executing for ${symbol} on ${timeframe}:`, error);
       
       // Write error state directly to blackboard to notify downstream supervisor of degradation
-      this.blackboard.writeAssessment(symbol, timeframe, {
-        agentName: this.name,
-        timestamp: startTime,
-        score: 0, // Neutral output due to failure
-        confidence: 0, // Zero confidence
-        data: { error: error instanceof Error ? error.message : String(error) },
-        justification: `Critical execution failure: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      this.blackboard.writeAssessment(
+        symbol,
+        timeframe,
+        {
+          agentName: this.name,
+          timestamp: startTime,
+          score: 0, // Neutral output due to failure
+          confidence: 0, // Zero confidence
+          data: { error: error instanceof Error ? error.message : String(error) },
+          justification: `Critical execution failure: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        1800000,
+        cycleId
+      );
     }
   }
 }
