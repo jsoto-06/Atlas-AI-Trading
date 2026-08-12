@@ -235,8 +235,10 @@ export class SupervisorAgent extends BaseAgent {
       let justificacion_cognitiva = '';
 
       const client = getGeminiClient();
+      const currentCycle = this.blackboard.getActiveCycle(symbol, timeframe);
+      const isBacktest = currentCycle?.startsWith('BT_') || process.env.NODE_ENV === 'test';
 
-      if (client && agentesEvaluados.length > 0) {
+      if (client && agentesEvaluados.length > 0 && !isBacktest) {
         try {
           console.log('[SupervisorAgent] Convocando al Comité de Riesgo de Gemini (Slow-Loop)...');
 

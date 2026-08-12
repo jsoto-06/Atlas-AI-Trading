@@ -201,6 +201,17 @@ export class BacktestEngine {
           timestamp: candleTime
         }, 300000, 0);
 
+        // Pre-cargar la ventana de velas en memoria para latencia cero sin peticiones HTTP/DB
+        const candleSlice = candles.slice(Math.max(0, i - 99), i + 1).map(c => ({
+          time: c.timestamp,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume
+        }));
+        this.technicalAgent.setMemoryCache(config.symbol, timeframe, candleSlice);
+
         // 2. Ejecutar agente de Análisis Técnico real
         await this.technicalAgent.execute(config.symbol, timeframe, cycleId);
 

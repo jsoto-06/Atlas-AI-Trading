@@ -31,6 +31,14 @@ export class TechnicalAnalystAgent extends BaseAgent {
   private readonly CACHE_TTL_MS = 60000; // 1 minute memory cache for candles
 
   /**
+   * Permite inyectar velas directamente en la caché de memoria (útil para ejecuciones de backtest ultra-rápidas).
+   */
+  public setMemoryCache(symbol: string, timeframe: string, candles: Candle[]): void {
+    const cacheKey = `${symbol}-${timeframe}`;
+    this.memoryCache.set(cacheKey, { candles, timestamp: Date.now() });
+  }
+
+  /**
    * Traduce un símbolo común como "BTC/USDT" al formato adecuado de Bitget.
    */
   private mapSymbol(symbol: string): string {

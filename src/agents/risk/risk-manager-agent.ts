@@ -41,11 +41,18 @@ export class RiskManagerAgent extends BaseAgent {
     defaultWinRate: 0.55         // Tasa de acierto histórica estimada para el Criterio de Kelly
   };
 
+  private cachedLimits: typeof this.DEFAULT_RISK_LIMITS | null = null;
+  private cachedLimitsTimestamp: number = 0;
+
   /**
    * Consulta las configuraciones de riesgo desde la tabla de base de datos.
    * Si no se encuentra o el pool está caído, devuelve la configuración de control predeterminada.
    */
   private async cargarLimitesRiesgo(): Promise<typeof this.DEFAULT_RISK_LIMITS> {
+    const now = Date.now();
+    if (this.cachedLimits && (now - this.cachedLimitsTimestamp < 60000)) {
+      return this.cachedLimits;
+    }
     try {
       // Intentar obtener el registro de configuración del motor
       const filas = await db
@@ -56,7 +63,7 @@ export class RiskManagerAgent extends BaseAgent {
 
       if (filas && filas.length > 0) {
         const dbVal = filas[0].value as any;
-        return {
+        this.cachedLimits = {
           maxDailyDrawdown: dbVal.maxDailyDrawdown ?? this.DEFAULT_RISK_LIMITS.maxDailyDrawdown,
           maxTotalDrawdown: dbVal.maxTotalDrawdown ?? this.DEFAULT_RISK_LIMITS.maxTotalDrawdown,
           maxDailyDrawdownUSD: dbVal.maxDailyDrawdownUSD ?? this.DEFAULT_RISK_LIMITS.maxDailyDrawdownUSD,
@@ -66,10 +73,14 @@ export class RiskManagerAgent extends BaseAgent {
           maxBitgetSpread: dbVal.maxBitgetSpread ?? this.DEFAULT_RISK_LIMITS.maxBitgetSpread,
           defaultWinRate: dbVal.defaultWinRate ?? this.DEFAULT_RISK_LIMITS.defaultWinRate
         };
+        this.cachedLimitsTimestamp = now;
+        return this.cachedLimits;
       }
     } catch (error) {
-      console.warn('[RiskManagerAgent] Error al consultar límites de riesgo en Drizzle DB. Aplicando fallback de contingencia:', error);
+      // Fallback
     }
+    this.cachedLimits = this.DEFAULT_RISK_LIMITS;
+    this.cachedLimitsTimestamp = now;
     return this.DEFAULT_RISK_LIMITS;
   }
 
