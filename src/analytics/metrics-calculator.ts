@@ -172,41 +172,49 @@ export class MetricsCalculator {
       const averageWinUSD = winningTradesCount > 0 ? Number((totalProfitUSD / winningTradesCount).toFixed(4)) : 0;
       const averageLossUSD = losingTradesCount > 0 ? Number((totalLossUSD / losingTradesCount).toFixed(4)) : 0;
 
-      // Factor de anualización de criptomonedas (365 días al año)
-      const annualizationFactor = Math.sqrt(365);
+      // 5. Reconstrucción de la Serie Temporal de Retornos Diarios de Equidad (para Sharpe y Sortino)
+      const dailyEquitiesMap = new Map<string, number>();
+      let tempEquity = balanceInicial;
 
-      // 5. Ratio de Sharpe Anualizado (Asumiendo Risk-Free Rate = 0%)
-      let sharpeRatio = 0;
-      if (totalTrades > 1) {
-        // Promedio de retornos (media)
-        const mediaRetornos = retornosPorcentaje.reduce((acc, val) => acc + val, 0) / totalTrades;
-        
-        // Desviación estándar muestral (N - 1)
-        const sumaDiferenciasCuadradas = retornosPorcentaje.reduce((acc, val) => acc + Math.pow(val - mediaRetornos, 2), 0);
-        const varianzaMuestral = sumaDiferenciasCuadradas / (totalTrades - 1);
-        const desviacionEstandar = Math.sqrt(varianzaMuestral);
+      for (const trade of closedTrades) {
+        const pnl = Number(trade.pnl || 0);
+        tempEquity += pnl;
+        const exitDateStr = trade.exitTime 
+          ? new Date(trade.exitTime).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        dailyEquitiesMap.set(exitDateStr, tempEquity);
+      }
 
-        if (desviacionEstandar > 0) {
-          sharpeRatio = Number(((mediaRetornos / desviacionEstandar) * annualizationFactor).toFixed(4));
+      const dailyEquities = Array.from(dailyEquitiesMap.values());
+      const dailyReturns: number[] = [];
+      for (let d = 1; d < dailyEquities.length; d++) {
+        const prevEq = dailyEquities[d - 1];
+        const currEq = dailyEquities[d];
+        if (prevEq > 0) {
+          dailyReturns.push((currEq - prevEq) / prevEq);
         }
       }
 
-      // 6. Ratio de Sortino Anualizado (Evaluando sólo Downside Deviation)
+      let sharpeRatio = 0;
       let sortinoRatio = 0;
-      if (totalTrades > 1) {
-        const mediaRetornos = retornosPorcentaje.reduce((acc, val) => acc + val, 0) / totalTrades;
-        
-        // Downside Deviation (desviación de retornos negativos, MAR = 0)
-        const retornosNegativosCuadrados = retornosPorcentaje.map(val => val < 0 ? Math.pow(val, 2) : 0);
-        const sumaRetornosNegativosCuadrados = retornosNegativosCuadrados.reduce((acc, val) => acc + val, 0);
-        
-        const varianzaAbajo = sumaRetornosNegativosCuadrados / totalTrades;
-        const desviacionAbajo = Math.sqrt(varianzaAbajo);
 
-        if (desviacionAbajo > 0) {
-          sortinoRatio = Number(((mediaRetornos / desviacionAbajo) * annualizationFactor).toFixed(4));
-        } else if (mediaRetornos > 0) {
-          sortinoRatio = 999.0; // Infinito técnico acotado
+      if (dailyReturns.length >= 2) {
+        const meanReturn = dailyReturns.reduce((acc, r) => acc + r, 0) / dailyReturns.length;
+        const variance = dailyReturns.reduce((acc, r) => acc + Math.pow(r - meanReturn, 2), 0) / (dailyReturns.length - 1);
+        const stdDev = Math.sqrt(variance);
+
+        if (stdDev > 0) {
+          sharpeRatio = Number(((meanReturn / stdDev) * Math.sqrt(365)).toFixed(4));
+        }
+
+        const downsideSquareSum = dailyReturns.reduce((acc, r) => (r < 0 ? acc + Math.pow(r, 2) : acc), 0);
+        const downsideVariance = downsideSquareSum / dailyReturns.length;
+        const downsideStdDev = Math.sqrt(downsideVariance);
+
+        if (downsideStdDev > 0) {
+          sortinoRatio = Number(((meanReturn / downsideStdDev) * Math.sqrt(365)).toFixed(4));
+        } else if (meanReturn > 0) {
+          sortinoRatio = 999.0;
         }
       }
 

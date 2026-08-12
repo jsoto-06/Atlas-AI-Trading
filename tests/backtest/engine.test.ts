@@ -18,7 +18,7 @@ describe('CRITICAL 4 & 6 — Backtest Strategy Synchronization & Zero Look-ahead
       start_time: Date.now() - 86400000,
       end_time: Date.now(),
       initial_balance: 10000
-    })).rejects.toThrow(/INSUFFICIENT MARKET DATA/);
+    })).rejects.toThrow(/BACKTEST_DATA_ERROR/);
   });
 
   it('debe ejecutar la simulación determinista sin sesgo de anticipación usando agentes reales', async () => {

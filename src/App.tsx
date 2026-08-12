@@ -1042,12 +1042,12 @@ export default function App() {
       }));
       await sleep(2500);
 
-      const newsScore = isUpTrend ? Math.floor(30 + Math.random() * 50) : -Math.floor(20 + Math.random() * 60);
-      const sentimentScore = isUpTrend ? Math.floor(40 + Math.random() * 45) : -Math.floor(25 + Math.random() * 55);
-      const onChainScore = Math.floor((Math.random() - 0.3) * 75);
-      const backtestWinRate = Number((55 + Math.random() * 15).toFixed(1));
-      const backtestProfitFactor = Number((1.5 + Math.random() * 1.2).toFixed(2));
-      const backtestScore = backtestWinRate > 60 ? 50 : 10;
+      const newsScore = isUpTrend ? 45 : -40;
+      const sentimentScore = isUpTrend ? 50 : -35;
+      const onChainScore = isUpTrend ? 30 : -25;
+      const backtestWinRate = 55.0;
+      const backtestProfitFactor = 1.25;
+      const backtestScore = 20;
 
       setAgents(prev => ({
         ...prev,

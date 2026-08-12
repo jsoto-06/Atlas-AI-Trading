@@ -7,7 +7,7 @@ import { MarketStateSnapshot } from '../types.ts';
 import { db } from '../db/index.ts';
 import { marketCandles } from '../db/schema.ts';
 import { eq, and, gte, lte, asc } from 'drizzle-orm';
-import { mapSymbol, getProductType } from '../execution/brokers/bitget-utils.ts';
+import { mapSymbol, getProductType, mapTimeframeToGranularity } from '../execution/brokers/bitget-utils.ts';
 
 export interface CandleData {
   open: number;
@@ -27,21 +27,90 @@ export class RealMarketDataProvider implements IMarketDataProvider {
   public async getCandles(symbol: string, timeframe: string, startTime: number, endTime: number): Promise<CandleData[]> {
     const mappedSymbol = mapSymbol(symbol);
     const productType = getProductType();
-    const url = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedSymbol}&productType=${productType}&granularity=15m&startTime=${startTime}&endTime=${endTime}&limit=1000`;
+    const granularity = mapTimeframeToGranularity(timeframe);
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status} al consultar velas de Bitget`);
-    const json = await res.json();
-    if (json.code !== '00000' || !Array.isArray(json.data)) return [];
+    const durationMs = endTime - startTime;
+    const daysRequested = Number((durationMs / (24 * 3600 * 1000)).toFixed(1));
+    const granularityMs = timeframe.toLowerCase() === '1h' ? 3600000 : 900000; // 15m default
+    const expectedCandles = Math.floor(durationMs / granularityMs);
 
-    return json.data.map((c: any) => ({
-      timestamp: parseInt(c[0]),
-      open: parseFloat(c[1]),
-      high: parseFloat(c[2]),
-      low: parseFloat(c[3]),
-      close: parseFloat(c[4]),
-      volume: parseFloat(c[5])
-    })).sort((a: CandleData, b: CandleData) => a.timestamp - b.timestamp);
+    console.log(`[PAGINATION] Requested: ${daysRequested} days / ~${expectedCandles} candles (${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()})`);
+
+    const candleMap = new Map<number, CandleData>();
+    let currentEnd = endTime;
+    let rawTotalCandlesCount = 0;
+    let page = 0;
+
+    while (currentEnd > startTime && page < 20) {
+      page++;
+      const chunkStart = Math.max(startTime, currentEnd - (1000 * granularityMs));
+      const url = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedSymbol}&productType=${productType}&granularity=${granularity}&startTime=${chunkStart}&endTime=${currentEnd}&limit=1000`;
+
+      let res: Response;
+      try {
+        res = await fetch(url);
+      } catch (err: any) {
+        throw new Error(`BACKTEST_DATA_ERROR: Error de red al consultar velas de Bitget (${err.message || err})`);
+      }
+
+      if (!res.ok) {
+        throw new Error(`BACKTEST_DATA_ERROR: HTTP ${res.status} al consultar velas de Bitget API`);
+      }
+
+      const json = await res.json();
+      if (json.code !== '00000') {
+        throw new Error(`BACKTEST_DATA_ERROR: Error de Bitget API [Code ${json.code}]: ${json.msg || 'Falla de mercado'}`);
+      }
+
+      if (!Array.isArray(json.data) || json.data.length === 0) {
+        console.warn(`[PAGINATION] Page ${page}: 0 candles returned for chunk [${new Date(chunkStart).toISOString()} - ${new Date(currentEnd).toISOString()}]`);
+        break;
+      }
+
+      let validCountInPage = 0;
+      let minTsInChunk = currentEnd;
+
+      for (const c of json.data) {
+        const ts = parseInt(c[0]);
+        if (!isNaN(ts) && ts >= startTime && ts <= endTime) {
+          rawTotalCandlesCount++;
+          validCountInPage++;
+          candleMap.set(ts, {
+            timestamp: ts,
+            open: parseFloat(c[1]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[3]),
+            close: parseFloat(c[4]),
+            volume: parseFloat(c[5])
+          });
+          if (ts < minTsInChunk) {
+            minTsInChunk = ts;
+          }
+        }
+      }
+
+      console.log(`[PAGINATION] Page ${page}: ${validCountInPage} candles`);
+
+      if (minTsInChunk >= currentEnd || validCountInPage === 0) {
+        break;
+      }
+      currentEnd = minTsInChunk - 1;
+    }
+
+    const uniqueCandles = Array.from(candleMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+    const duplicates = rawTotalCandlesCount - uniqueCandles.length;
+    const coveragePct = Number(((uniqueCandles.length / Math.max(1, expectedCandles)) * 100).toFixed(1));
+
+    console.log(`[PAGINATION] Total raw candles: ${rawTotalCandlesCount}`);
+    console.log(`[PAGINATION] Unique candles   : ${uniqueCandles.length}`);
+    console.log(`[PAGINATION] Duplicates       : ${duplicates}`);
+    console.log(`[PAGINATION] Coverage         : ${coveragePct}%`);
+
+    if (uniqueCandles.length === 0) {
+      throw new Error(`BACKTEST_DATA_ERROR: No se encontraron velas de mercado para ${symbol} en el rango especificado.`);
+    }
+
+    return uniqueCandles;
   }
 
   public async getTicker(symbol: string): Promise<MarketStateSnapshot> {

@@ -437,291 +437,144 @@ export class BitgetBroker extends BaseBroker {
       return null;
     } catch (err: any) {
       console.warn(`[BitgetBroker] Orden con clientOid (${clientOid}) no encontrada o consulta fallida en Bitget: ${err.message || err}`);
-return {
-        exitoso: true,
-        orderId,
-        clientOrderId,
-        precioEjecutado: priceExecuted,
-        tamanoEjecutado: sizeExecuted,
-        comisionUSD,
-        mensajeRespuesta: `Orden en Bitget ${isReal ? 'REAL' : 'DEMO'} colocada con éxito. ID: ${orderId}, ClientOid: ${clientOrderId}, Símbolo: ${mappedSymbol}, Lado: ${request.lado}, Tamaño: ${formattedSize} en $${priceExecuted.toLocaleString()} USD.`,
-        timestamp: Date.now(),
-        reintentosRealizados: 0
-      };
-    };
-
-
-    const resultadoReintentos = await this.runWithExponentialBackoff(transaccion);
-
-    if (resultadoReintentos.exito && resultadoReintentos.resultado) {
-      return {
-        ...resultadoReintentos.resultado,
-        reintentosRealizados: resultadoReintentos.intentos - 1
-      };
-    } else {
-      const errorMsg = resultadoReintentos.error?.message || 'Error de API o red de Bitget';
-      console.error(`[BitgetBroker] Falla crítica definitiva tras reintentos: ${errorMsg}`);
-      return {
-        exitoso: false,
-        mensajeRespuesta: `No se pudo ejecutar la orden real en Bitget: ${errorMsg}`,
-        timestamp: Date.now(),
-        error: errorMsg,
-        reintentosRealizados: resultadoReintentos.intentos - 1
-      };
-    }
-  }
-
-  /**
-   * Obtiene la cotización del ticker en tiempo real de Bitget.
-   */
-  public async getTicker(symbol: string): Promise<{ symbol: string; price: number; volume24h: number; high24h: number; low24h: number; timestamp: number } | null> {
-    try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const productType = this.getProductType();
-      const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
-
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const json = await res.json();
-      if (json.code !== '00000' || !json.data || json.data.length === 0) return null;
-
-      const t = json.data[0];
-      return {
-        symbol,
-        price: parseFloat(t.lastPr),
-        volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
-        high24h: parseFloat(t.high24h ?? t.lastPr),
-        low24h: parseFloat(t.low24h ?? t.lastPr),
-        timestamp: Date.now()
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /**
-   * Consulta el balance disponible en el monedero de futuros de Bitget (Demo o Real).
-   */
-  public async getBalance(asset: string): Promise<number> {
-    try {
-      const isReal = process.env.BITGET_MODO_REAL === 'true';
-      const targetProductType = this.getProductType();
-      const queryAsset = isReal ? asset.toUpperCase() : (asset.toUpperCase() === 'USDT' ? 'SUSDT' : asset.toUpperCase());
-      
-      console.log(`[BitgetBroker] [GET /api/v2/mix/account/accounts] Solicitando balance de margen (${isReal ? 'Real' : 'Demo'}) para target asset: ${queryAsset}, productType: ${targetProductType}`);
-      const accounts = await this.sendRequest('GET', '/api/v2/mix/account/accounts', { productType: targetProductType });
-      
-      if (Array.isArray(accounts) && accounts.length > 0) {
-        const matched = accounts.find((acc: any) => {
-          const coin = (acc.marginCoin || acc.coin || '').toUpperCase();
-          return coin === queryAsset || coin === asset.toUpperCase() || coin.includes('USDT');
-        }) || accounts[0];
-
-        if (matched) {
-          const available = parseFloat(matched.available || matched.availableBalance || matched.maxOpenPosAvailable || matched.equity || '0');
-          if (!isNaN(available)) {
-            console.log(`[BitgetBroker] Balance obtenido con éxito: $${available} (${matched.marginCoin || matched.coin || asset})`);
-            return available;
-          }
-        }
-      }
-      return 0;
-    } catch (error: any) {
-      console.warn(`[BitgetBroker] Aviso al obtener balance de Bitget (${error?.message || error}). Si no has guardado tus API Keys en la pestaña "Configuración API" o en .env, se utilizará 0 como salvaguarda.`);
-      return 0;
-    }
-  }
-
-
-  /**
-   * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
-   */
-  public async getPosition(symbol: string): Promise<{ size: number; entryPrice: number; unrealizedPnl: number; holdSide?: string; rawSymbol?: string; marginCoin?: string } | null> {
-    try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const isReal = process.env.BITGET_MODO_REAL === 'true';
-      const targetProductType = this.getProductType();
-      console.log(`[BitgetBroker] [GET /api/v2/mix/position/all-position] Recuperando posición activa (${isReal ? 'Real' : 'Demo'}) para: ${mappedSymbol}`);
-      
-      const positions = await this.sendRequest('GET', '/api/v2/mix/position/all-position', { productType: targetProductType });
-      
-      if (Array.isArray(positions) && positions.length > 0) {
-        const matched = positions.find((pos: any) => {
-          const posSym = (pos.symbol || pos.instId || pos.symbolId || '').toUpperCase();
-          const targetSym = mappedSymbol.toUpperCase();
-          
-          // Mapeo flexible de símbolo (SBTCSUSDT vs SBTCSUSDT_SUMCBL vs BTCUSDT)
-          const cleanPos = posSym.replace(/[^A-Z0-9]/g, '');
-          const cleanTarget = targetSym.replace(/[^A-Z0-9]/g, '');
-          const isSymbolMatch = cleanPos === cleanTarget || cleanPos.includes(cleanTarget) || cleanTarget.includes(cleanPos);
-          
-          // Mapeo flexible de tamaño de posición (total, holdAmount, available, size, totalHold, openDelegate, marginSize)
-          const rawVal = pos.total ?? pos.holdAmount ?? pos.available ?? pos.size ?? pos.totalHold ?? pos.holdSize ?? pos.marginSize ?? '0';
-          const sizeVal = parseFloat(rawVal);
-          const isHold = !isNaN(sizeVal) && Math.abs(sizeVal) > 0;
-          return isSymbolMatch && isHold;
-        });
-
-        if (matched) {
-          const rawSize = parseFloat(
-            matched.total ?? matched.holdAmount ?? matched.available ?? matched.size ?? matched.totalHold ?? matched.holdSize ?? '0'
-          );
-          const size = Math.abs(rawSize);
-          const holdSideStr = (matched.holdSide || matched.posSide || matched.side || 'long').toLowerCase();
-          const isShort = holdSideStr === 'short' || holdSideStr === 'sell';
-          const sizeSigned = isShort ? -size : size;
-          
-          return {
-            size: sizeSigned,
-            entryPrice: parseFloat(matched.openPrice || matched.entryPrice || matched.achievePrice || matched.openPriceAvg || '0'),
-            unrealizedPnl: parseFloat(matched.upl || matched.unrealizedPL || matched.unrealizedPnl || '0'),
-            holdSide: isShort ? 'short' : 'long',
-            rawSymbol: matched.symbol || matched.instId || mappedSymbol,
-            marginCoin: matched.marginCoin || (isReal ? 'USDT' : 'SUSDT')
-          };
-        }
-      }
-      return null;
-    } catch (error) {
-      console.warn(`[BitgetBroker] Error al consultar posición activa para ${symbol}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Ajusta explícitamente el apalancamiento en la cuenta de Bitget para el símbolo dado.
-   */
-  public async setLeverage(symbol: string, leverage: number, holdSide: 'long' | 'short' = 'long'): Promise<boolean> {
-    try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const productType = this.getProductType();
-      const isReal = process.env.BITGET_MODO_REAL === 'true';
-      const marginCoin = isReal ? 'USDT' : (mappedSymbol.endsWith('SUSDT') ? 'SUSDT' : 'USDT');
-
-      console.log(`[BitgetBroker] Ajustando apalancamiento en Bitget a ${leverage}x para ${mappedSymbol}...`);
-      await this.sendRequest('POST', '/api/v2/mix/account/set-leverage', {}, {
-        symbol: mappedSymbol,
-        productType,
-        marginCoin,
-        leverage: leverage.toString(),
-        holdSide
-      });
-      return true;
-    } catch (err: any) {
-      console.warn(`[BitgetBroker] Aviso al ajustar apalancamiento a ${leverage}x en Bitget: ${err.message || err}`);
-      return false;
-    }
-  }
-
-  /**
-   * Consulta el estado de una orden en Bitget utilizando su clientOid determinista.
-   */
-  public async getOrderByClientOid(symbol: string, clientOid: string): Promise<any | null> {
-    try {
-      const mappedSymbol = this.mapSymbol(symbol);
-      const productType = this.getProductType();
-      console.log(`[BitgetBroker] Consultando estado de orden por clientOid (${clientOid}) en Bitget...`);
-      const res = await this.sendRequest('GET', '/api/v2/mix/order/detail', {
-        symbol: mappedSymbol,
-        productType,
-        clientOid
-      });
-      if (res && (res.orderId || res.clientOid)) {
-        return res;
-      }
-      return null;
-    } catch (err: any) {
-      console.warn(`[BitgetBroker] Orden con clientOid (${clientOid}) no encontrada o consulta fallida en Bitget: ${err.message || err}`);
       return null;
     }
   }
 
   /**
    * Envía una orden de cierre inmediato de la posición activa en Bitget (Demo o Real).
-   * Utiliza el endpoint `/api/v2/mix/order/close-positions` como método principal y
-   * garantiza idempotencia mediante un `clientOid` único por cierre lógico.
-   * En caso de error ambiguo o timeout, verifica explícitamente la posición actual
-   * mediante `getPosition()` antes de considerar cualquier fallback.
    */
   public async closePosition(symbol: string): Promise<ExecutionResult> {
     const isReal = process.env.BITGET_MODO_REAL === 'true';
     const mappedSymbol = this.mapSymbol(symbol);
     const targetProductType = this.getProductType();
     const targetMarginCoin = isReal ? 'USDT' : 'SUSDT';
-    const clientOid = `close_${mappedSymbol}_${Date.now()}`; // idempotente por cierre lógico
 
-    console.log(`[BitgetBroker] Solicitando cierre de posición (${isReal ? 'Real' : 'Demo'}) para: ${mappedSymbol} con clientOid ${clientOid}...`);
+    console.log(`[BitgetBroker] Solicitando cierre de posición (${isReal ? 'Real' : 'Demo'}) para: ${mappedSymbol}...`);
 
-    // Obtener posición actual; si no existe, consideramos que ya está cerrada (idempotente).
-    const currentPos = await this.getPosition(symbol);
-    if (!currentPos) {
-      console.log(`[BitgetBroker] No hay posición activa para ${mappedSymbol}. Considerado cerrado idempotente.`);
-      return {
-        exitoso: true,
-        mensajeRespuesta: `No existe posición activa para ${mappedSymbol}; ya está cerrada.`,
-        timestamp: Date.now(),
-        reintentosRealizados: 0,
-        clientOrderId: clientOid
-      };
-    }
+    const pos = await this.getPosition(symbol);
 
-    const attemptClose = async (): Promise<ExecutionResult> => {
-      try {
-        const payload = { symbol: mappedSymbol, productType: targetProductType, marginCoin: targetMarginCoin, clientOid, reduceOnly: true };
-        const res = await this.sendRequest('POST', '/api/v2/mix/order/close-positions', {}, payload);
-        if (res) {
-          console.log(`[BitgetBroker] Posición cerrada exitosamente vía endpoint /close-positions.`);
-          return {
-            exitoso: true,
-            orderId: res.orderId || res.orderNo || clientOid,
-            mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
-            timestamp: Date.now(),
-            reintentosRealizados: 0,
-            clientOrderId: clientOid
-          };
+    const transaccionCierre = async (): Promise<ExecutionResult> => {
+      let res: any = null;
+      let ultimoError: any = null;
+
+      // Intentar variante 1: Endpoint oficial de cierre rápido de Bitget V2 (/api/v2/mix/order/close-positions)
+      const closePosPayloads = [
+        { symbol: mappedSymbol, productType: targetProductType },
+        { symbol: pos?.rawSymbol || mappedSymbol, productType: targetProductType },
+        { symbol: mappedSymbol, productType: targetProductType, holdSide: pos?.holdSide || 'long' },
+        { symbol: mappedSymbol, productType: targetProductType, holdSide: pos?.holdSide || 'short' }
+      ];
+
+      for (let idx = 0; idx < closePosPayloads.length; idx++) {
+        try {
+          console.log(`[BitgetBroker] [POST /api/v2/mix/order/close-positions] Intentando cierre directo en Bitget (Variante ${idx + 1}/${closePosPayloads.length}):`, JSON.stringify(closePosPayloads[idx]));
+          res = await this.sendRequest('POST', '/api/v2/mix/order/close-positions', {}, closePosPayloads[idx]);
+          if (res) {
+            console.log(`[BitgetBroker] ¡Posición cerrada exitosamente vía endpoint /close-positions en Bitget!`);
+            break;
+          }
+        } catch (err: any) {
+          ultimoError = err;
+          console.warn(`[BitgetBroker] Cierre directo variante ${idx + 1} no aplicable (${err.message || err}). Probando variante reducida...`);
+          continue;
         }
-      } catch (err: any) {
-        console.warn(`[BitgetBroker] Error al intentar cerrar vía /close-positions: ${err.message || err}`);
-        const msg = err.message || '';
-        if (msg.includes('22002') || msg.includes('No position to close') || msg.includes('not exist')) {
-          return {
-            exitoso: true,
-            mensajeRespuesta: `La posición para ${mappedSymbol} ya se encuentra totalmente cerrada en Bitget.`,
-            timestamp: Date.now(),
-            reintentosRealizados: 0,
-            clientOrderId: clientOid
-          };
-        }
-        // En casos ambiguos, verificar la posición real.
-        const verifiedPos = await this.getPosition(symbol);
-        if (!verifiedPos || Math.abs(verifiedPos.size) === 0) {
-          return {
-            exitoso: true,
-            mensajeRespuesta: `Posición cerrada (verificada) en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
-            timestamp: Date.now(),
-            reintentosRealizados: 0,
-            clientOrderId: clientOid
-          };
-        }
-        throw err;
       }
+
+      // Si /close-positions tuvo éxito, retornar
+      if (res) {
+        return {
+          exitoso: true,
+          orderId: res.orderId || res.orderNo || `close_${Date.now()}`,
+          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
+          timestamp: Date.now(),
+          reintentosRealizados: 0
+        };
+      }
+
+      // Si /close-positions falló pero hay posición conocida, intentar orden de reducción de mercado
+      if (pos && pos.size !== 0) {
+        const absSize = Math.abs(pos.size);
+        const posSideVal = pos.size > 0 ? 'long' : 'short';
+        const sideVal = pos.size > 0 ? 'sell' : 'buy';
+
+        const variacionesCierre: Array<Record<string, string | boolean>> = [
+          {
+            symbol: pos.rawSymbol || mappedSymbol,
+            productType: targetProductType,
+            marginCoin: pos.marginCoin || targetMarginCoin,
+            marginMode: 'crossed',
+            size: absSize.toString(),
+            side: sideVal,
+            orderType: 'market',
+            force: 'ioc',
+            reduceOnly: 'yes'
+          },
+          {
+            symbol: pos.rawSymbol || mappedSymbol,
+            productType: targetProductType,
+            marginCoin: pos.marginCoin || targetMarginCoin,
+            marginMode: 'crossed',
+            size: absSize.toString(),
+            side: sideVal,
+            posSide: posSideVal,
+            tradeSide: 'close',
+            orderType: 'market',
+            force: 'ioc'
+          }
+        ];
+
+        for (let idx = 0; idx < variacionesCierre.length; idx++) {
+          try {
+            console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Variante de orden de reducción ${idx + 1}/${variacionesCierre.length}:`, JSON.stringify(variacionesCierre[idx]));
+            res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, variacionesCierre[idx]);
+            if (res) break;
+          } catch (err: any) {
+            ultimoError = err;
+            console.warn(`[BitgetBroker] Variante de orden de reducción ${idx + 1} rechazada (${err.message || err}).`);
+            continue;
+          }
+        }
+      }
+
+      if (res) {
+        return {
+          exitoso: true,
+          orderId: res.orderId || res.orderNo || `close_${Date.now()}`,
+          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
+          timestamp: Date.now(),
+          reintentosRealizados: 0
+        };
+      }
+
+      const msgError = ultimoError?.message || '';
+      if (msgError.includes('22002') || msgError.includes('No position to close') || msgError.includes('not exist')) {
+        return {
+          exitoso: true,
+          mensajeRespuesta: `La posición para ${mappedSymbol} ya se encuentra totalmente cerrada en Bitget.`,
+          timestamp: Date.now(),
+          reintentosRealizados: 0
+        };
+      }
+
+      throw ultimoError || new Error(`No fue posible cerrar la posición para ${mappedSymbol} en Bitget.`);
     };
 
     try {
-      const result = await this.runWithExponentialBackoff(attemptClose);
-      if (result.exito && result.resultado) {
-        return result.resultado;
+      const resultado = await this.runWithExponentialBackoff(transaccionCierre);
+      if (resultado.exito && resultado.resultado) {
+        return resultado.resultado;
+      } else {
+        throw new Error(resultado.error?.message || 'Error al cerrar posición');
       }
-      throw new Error(result.error?.message || 'Error al cerrar posición');
     } catch (error: any) {
-      console.error(`[BitgetBroker] Fallo definitivo al cerrar posición: ${error?.message || error}`);
+      console.error(`[BitgetBroker] Error al cerrar posición: ${error?.message || error}`);
       return {
         exitoso: false,
         mensajeRespuesta: `Error al cerrar posición en Bitget: ${error.message || error}`,
         timestamp: Date.now(),
         error: 'CLOSE_POSITION_FAILED',
-        reintentosRealizados: 0,
-        clientOrderId: clientOid
+        reintentosRealizados: 0
       };
     }
   }

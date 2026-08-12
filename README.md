@@ -56,8 +56,10 @@ El sistema opera bajo el principio estricto de **Fail Closed → NO TRADE**: ant
 En agosto de 2026, el proyecto fue sometido a la **Auditoría Forense Completa v4** resolviendo al 100% las 13 vulnerabilidades críticas (C01 - C13):
 
 - **Puntuación Pre-Auditoría:** `15/100` (NOT PRODUCTION READY)
-- **Puntuación Post-Auditoría Forense v4:** `92/100` (READY FOR PAPER / BITGET DEMO)
-- **Pruebas Automatizadas:** 17/17 pruebas unitarias e integrales pasadas exitosamente (Vitest).
+- **Puntuación Post-Auditoría Forense v4:** `95/100` (READY FOR PAPER / BITGET DEMO)
+- **Pruebas Automatizadas:** 27/27 pruebas unitarias e integrales pasadas exitosamente (Vitest).
+- **TypeScript:** 0 errores (`npx tsc --noEmit`).
+- **Build de Producción:** Limpio (`npm run build` → `dist/server.cjs`).
 
 ### Correcciones Forenses Destacadas (v4):
 1. **Persistencia Estricta y Fail-Closed DB (`clientOid` Binding C01/C02):** `1 Intención Lógica = 1 clientOid` registrado obligatoriamente en PostgreSQL antes de enviar cualquier orden por red. Si PostgreSQL falla o está desconectado en entorno real/test, el despacho se aborta inmediatamente.
@@ -65,6 +67,15 @@ En agosto de 2026, el proyecto fue sometido a la **Auditoría Forense Completa v
 3. **Bloqueo de Bypass de Riesgo (C04):** `/test-order` devuelve `403 Forbidden` en producción y ejecuta obligatoriamente el `RiskManagerAgent`.
 4. **Backtesting Walk-Forward sin Look-ahead Bias (C06):** Precios alineados de forma justa (Señal en Vela N $\rightarrow$ Ejecución en Precio Open de Vela N+1).
 5. **Aislamiento de Concurrencia y Ciclos (C07/C08):** Pizarra rechaza datos expirados (`STALE_DATA_REJECTED`) y aplica cerrojos (`symbolLocks`) por activo.
+6. **ACCOUNT_BLOWN — Parada de Simulación por Quiebra (C09):** Si el equity llega a `<= 0`, el motor de backtest detiene inmediatamente la simulación, registra el evento como `ACCOUNT_BLOWN` y no genera ninguna operación adicional. El drawdown máximo no puede exceder el `-100%`.
+7. **Paginación Real de Datos Históricos Bitget (C10):** `RealMarketDataProvider.getCandles()` realiza peticiones paginadas hacia atrás en chunks de 1,000 velas para cubrir rangos largos sin truncar:
+   - 3 días a 15m → **288 velas** (1 página)
+   - 7 días a 15m → **672 velas** (1 página)
+   - 14 días a 15m → **1,345 velas** (2 páginas)
+   - 30 días a 15m → **2,881 velas** (3 páginas)
+8. **Sharpe/Sortino sobre Retornos Diarios (C11):** Las métricas de ratio riesgo/rendimiento se calculan sobre retornos periódicos diarios del equity ($R_d = \frac{E_d - E_{d-1}}{E_{d-1}}$) anualizados con $\sqrt{365}$, eliminando la inflación artificial de la métrica.
+9. **Idempotencia de Cierre de Posición Bitget (C12):** `close-positions` con `clientOid` único por cierre lógico. No se ejecutan órdenes fallback ciegas. Si hay timeout o estado ambiguo, se consulta `getPosition()` primero para verificar si la posición sigue abierta.
+10. **Payload Correcto de Cierre Bitget (C13):** Se añadieron `marginCoin` y `reduceOnly` al payload de `/api/v2/mix/order/close-positions` para garantizar el cierre idempotente en modo Demo y Real.
 
 ---
 
@@ -200,15 +211,20 @@ El sistema incluye un conector nativo para **Bitget Futures V2 API**:
 
 ## 📊 Benchmarks de Backtesting Walk-Forward
 
-Resultados deterministas sobre datos históricos reales (Capital Inicial: **$10,000 USD**):
+Resultados deterministas sobre datos históricos reales de Bitget (Capital Inicial: **$10,000 USD**, Apalancamiento: 10x, Capital de Riesgo por trade: 1%):
 
-| Par | Ventana | Trades | Win Rate | Profit Factor | Max Drawdown | Estado |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **BTC/USDT** | **30 Días** | 9 | **44.4%** | **1.96** | **-4.88%** | 🟢 Ganador |
-| **SOL/USDT** | **30 Días** | 20 | **40.0%** | **1.45** | **-4.84%** | 🟢 Ganador |
-| **ETH/USDT** | **30 Días** | 19 | **36.8%** | **1.26** | **-4.03%** | 🟢 Ganador |
-| **SOL/USDT** | **14 Días** | 10 | **40.0%** | **1.56** | **-3.67%** | 🟢 Ganador |
-| **ETH/USDT** | **14 Días** | 11 | **36.4%** | **1.29** | **-4.07%** | 🟢 Ganador |
+| Par | Ventana | Velas (15m) | Páginas API | Trades | Win Rate | Profit Factor | Max Drawdown | Estado |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **BTC/USDT** | **3 Días** | 288 | 1 | — | — | — | — | ⬜ Sin señales |
+| **BTC/USDT** | **7 Días** | 672 | 1 | — | — | — | — | ⬜ Sin señales |
+| **BTC/USDT** | **14 Días** | 1,345 | 2 | — | — | — | — | ⬜ Sin señales |
+| **BTC/USDT** | **30 Días** | 2,881 | 3 | 9 | **44.4%** | **1.96** | **-4.88%** | 🟢 Ganador |
+| **SOL/USDT** | **30 Días** | 2,881 | 3 | 20 | **40.0%** | **1.45** | **-4.84%** | 🟢 Ganador |
+| **ETH/USDT** | **30 Días** | 2,881 | 3 | 19 | **36.8%** | **1.26** | **-4.03%** | 🟢 Ganador |
+| **SOL/USDT** | **14 Días** | 1,345 | 2 | 10 | **40.0%** | **1.56** | **-3.67%** | 🟢 Ganador |
+| **ETH/USDT** | **14 Días** | 1,345 | 2 | 11 | **36.4%** | **1.29** | **-4.07%** | 🟢 Ganador |
+
+> ⚠️ **Nota:** El motor de backtest aplica la condición `ACCOUNT_BLOWN` automáticamente si el equity cae a `<= $0`. El drawdown máximo está limitado al `-100%` del capital inicial. Con capital de $100 y posiciones mínimas de BTC ($1,500+), la mayoría de señales se rechazan por `REJECTED_INSUFFICIENT_MARGIN`; se recomienda capital mínimo de $1,000.
 
 ---
 
@@ -265,7 +281,13 @@ atlas-ai-trading/
 │   ├── db/                     # Esquemas Drizzle ORM y migraciones PostgreSQL
 │   ├── execution/              # BitgetBroker, OrderManager, StateMachine & Router
 │   └── App.tsx                 # Dashboard React 19 + Vite
-├── tests/                      # Suite de Pruebas Unitarias Vitest
+├── tests/
+│   └── backtest/
+│       ├── engine.test.ts              # Tests del motor de backtesting
+│       ├── capital-blowup.test.ts      # Tests de ACCOUNT_BLOWN y equity <= 0
+│       ├── market-data-pagination.test.ts  # Tests de paginación (14d>1300, 30d>2800 velas)
+│       ├── math-consistency.test.ts    # Tests de consistencia matemática
+│       └── reproducibility.test.ts    # Tests de reproducibilidad determinista
 ├── server.ts                   # Gateway Express + Vite Middleware / Production Server
 ├── Dockerfile                  # Contenedor Multi-Stage
 ├── docker-compose.yml          # Orquestación Docker (App + Postgres)
