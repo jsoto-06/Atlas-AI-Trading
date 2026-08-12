@@ -341,43 +341,54 @@ export class BitgetBroker extends BaseBroker {
   /**
    * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
    */
-  /**
-   * Consulta el tamaño y PnL no realizado de posiciones activas en Bitget (Demo o Real).
-   */
   public async getPosition(symbol: string): Promise<{ size: number; entryPrice: number; unrealizedPnl: number; holdSide?: string; rawSymbol?: string; marginCoin?: string } | null> {
     try {
       const mappedSymbol = this.mapSymbol(symbol);
       const isReal = process.env.BITGET_MODO_REAL === 'true';
+      const targetProductType = this.getProductType();
       console.log(`[BitgetBroker] [GET /api/v2/mix/position/all-position] Recuperando posición activa (${isReal ? 'Real' : 'Demo'}) para: ${mappedSymbol}`);
       
-      const positions = await this.sendRequest('GET', '/api/v2/mix/position/all-position', { productType: this.getProductType() });
+      const positions = await this.sendRequest('GET', '/api/v2/mix/position/all-position', { productType: targetProductType });
       
-      if (Array.isArray(positions)) {
+      if (Array.isArray(positions) && positions.length > 0) {
         const matched = positions.find((pos: any) => {
-          const posSym = (pos.symbol || pos.instId || '').toUpperCase();
+          const posSym = (pos.symbol || pos.instId || pos.symbolId || '').toUpperCase();
           const targetSym = mappedSymbol.toUpperCase();
-          const isSymbolMatch = posSym === targetSym;
-          const isHold = parseFloat(pos.total || pos.holdAmount || pos.available || '0') > 0;
+          
+          // Mapeo flexible de símbolo (SBTCSUSDT vs SBTCSUSDT_SUMCBL vs BTCUSDT)
+          const cleanPos = posSym.replace(/[^A-Z0-9]/g, '');
+          const cleanTarget = targetSym.replace(/[^A-Z0-9]/g, '');
+          const isSymbolMatch = cleanPos === cleanTarget || cleanPos.includes(cleanTarget) || cleanTarget.includes(cleanPos);
+          
+          // Mapeo flexible de tamaño de posición (total, holdAmount, available, size, totalHold, openDelegate, marginSize)
+          const rawVal = pos.total ?? pos.holdAmount ?? pos.available ?? pos.size ?? pos.totalHold ?? pos.holdSize ?? pos.marginSize ?? '0';
+          const sizeVal = parseFloat(rawVal);
+          const isHold = !isNaN(sizeVal) && Math.abs(sizeVal) > 0;
           return isSymbolMatch && isHold;
         });
+
         if (matched) {
-          const size = parseFloat(matched.total || matched.holdAmount || matched.available || '0');
-          const holdSideStr = (matched.holdSide || matched.posSide || 'long').toLowerCase();
-          const isShort = holdSideStr === 'short';
+          const rawSize = parseFloat(
+            matched.total ?? matched.holdAmount ?? matched.available ?? matched.size ?? matched.totalHold ?? matched.holdSize ?? '0'
+          );
+          const size = Math.abs(rawSize);
+          const holdSideStr = (matched.holdSide || matched.posSide || matched.side || 'long').toLowerCase();
+          const isShort = holdSideStr === 'short' || holdSideStr === 'sell';
           const sizeSigned = isShort ? -size : size;
           
           return {
             size: sizeSigned,
-            entryPrice: parseFloat(matched.openPrice || matched.entryPrice || matched.achievePrice || '0'),
-            unrealizedPnl: parseFloat(matched.upl || matched.unrealizedPL || '0'),
-            holdSide: holdSideStr,
-            rawSymbol: matched.symbol || matched.instId,
-            marginCoin: matched.marginCoin
+            entryPrice: parseFloat(matched.openPrice || matched.entryPrice || matched.achievePrice || matched.openPriceAvg || '0'),
+            unrealizedPnl: parseFloat(matched.upl || matched.unrealizedPL || matched.unrealizedPnl || '0'),
+            holdSide: isShort ? 'short' : 'long',
+            rawSymbol: matched.symbol || matched.instId || mappedSymbol,
+            marginCoin: matched.marginCoin || (isReal ? 'USDT' : 'SUSDT')
           };
         }
       }
       return null;
     } catch (error) {
+      console.warn(`[BitgetBroker] Error al consultar posición activa para ${symbol}:`, error);
       return null;
     }
   }
@@ -435,35 +446,63 @@ export class BitgetBroker extends BaseBroker {
    */
   public async closePosition(symbol: string): Promise<ExecutionResult> {
     const isReal = process.env.BITGET_MODO_REAL === 'true';
-    console.log(`[BitgetBroker] Solicitando cierre de posición (${isReal ? 'Real' : 'Demo'}) para: ${symbol}`);
-    
-    try {
-      const pos = await this.getPosition(symbol);
-      if (!pos || pos.size === 0) {
+    const mappedSymbol = this.mapSymbol(symbol);
+    const targetProductType = this.getProductType();
+    const targetMarginCoin = isReal ? 'USDT' : 'SUSDT';
+
+    console.log(`[BitgetBroker] Solicitando cierre de posición (${isReal ? 'Real' : 'Demo'}) para: ${mappedSymbol}...`);
+
+    const pos = await this.getPosition(symbol);
+
+    const transaccionCierre = async (): Promise<ExecutionResult> => {
+      let res: any = null;
+      let ultimoError: any = null;
+
+      // Intentar variante 1: Endpoint oficial de cierre rápido de Bitget V2 (/api/v2/mix/order/close-positions)
+      const closePosPayloads = [
+        { symbol: mappedSymbol, productType: targetProductType },
+        { symbol: pos?.rawSymbol || mappedSymbol, productType: targetProductType },
+        { symbol: mappedSymbol, productType: targetProductType, holdSide: pos?.holdSide || 'long' },
+        { symbol: mappedSymbol, productType: targetProductType, holdSide: pos?.holdSide || 'short' }
+      ];
+
+      for (let idx = 0; idx < closePosPayloads.length; idx++) {
+        try {
+          console.log(`[BitgetBroker] [POST /api/v2/mix/order/close-positions] Intentando cierre directo en Bitget (Variante ${idx + 1}/${closePosPayloads.length}):`, JSON.stringify(closePosPayloads[idx]));
+          res = await this.sendRequest('POST', '/api/v2/mix/order/close-positions', {}, closePosPayloads[idx]);
+          if (res) {
+            console.log(`[BitgetBroker] ¡Posición cerrada exitosamente vía endpoint /close-positions en Bitget!`);
+            break;
+          }
+        } catch (err: any) {
+          ultimoError = err;
+          console.warn(`[BitgetBroker] Cierre directo variante ${idx + 1} no aplicable (${err.message || err}). Probando variante reducida...`);
+          continue;
+        }
+      }
+
+      // Si /close-positions tuvo éxito, retornar
+      if (res) {
         return {
           exitoso: true,
-          mensajeRespuesta: `No se encontró posición activa para cerrar en Bitget ${isReal ? 'Real' : 'Demo'} (${symbol}).`,
+          orderId: res.orderId || res.orderNo || `close_${Date.now()}`,
+          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
           timestamp: Date.now(),
           reintentosRealizados: 0
         };
       }
 
-      const absSize = Math.abs(pos.size);
-      const mappedSymbol = pos.rawSymbol || this.mapSymbol(symbol);
-      const isDemoSymbol = mappedSymbol.startsWith('S') && mappedSymbol.endsWith('SUSDT');
-      const targetMarginCoin = pos.marginCoin || (isDemoSymbol ? 'SUSDT' : 'USDT');
-      const targetProductType = isDemoSymbol ? 'SUSDT-FUTURES' : 'USDT-FUTURES';
+      // Si /close-positions falló pero hay posición conocida, intentar orden de reducción de mercado
+      if (pos && pos.size !== 0) {
+        const absSize = Math.abs(pos.size);
+        const posSideVal = pos.size > 0 ? 'long' : 'short';
+        const sideVal = pos.size > 0 ? 'sell' : 'buy';
 
-      const posSideVal = pos.size > 0 ? 'long' : 'short';
-      const sideVal = pos.size > 0 ? 'sell' : 'buy';
-
-      const transaccionCierre = async (): Promise<ExecutionResult> => {
         const variacionesCierre: Array<Record<string, string | boolean>> = [
-          // Variante 1: Modo Unilateral / One-Way (side: 'buy'/'sell', reduceOnly: 'yes', sin posSide ni tradeSide)
           {
-            symbol: mappedSymbol,
+            symbol: pos.rawSymbol || mappedSymbol,
             productType: targetProductType,
-            marginCoin: targetMarginCoin,
+            marginCoin: pos.marginCoin || targetMarginCoin,
             marginMode: 'crossed',
             size: absSize.toString(),
             side: sideVal,
@@ -471,11 +510,10 @@ export class BitgetBroker extends BaseBroker {
             force: 'ioc',
             reduceOnly: 'yes'
           },
-          // Variante 2: Modo Cobertura / Hedge (side: 'buy'/'sell', posSide: 'long'/'short', tradeSide: 'close')
           {
-            symbol: mappedSymbol,
+            symbol: pos.rawSymbol || mappedSymbol,
             productType: targetProductType,
-            marginCoin: targetMarginCoin,
+            marginCoin: pos.marginCoin || targetMarginCoin,
             marginMode: 'crossed',
             size: absSize.toString(),
             side: sideVal,
@@ -486,50 +524,43 @@ export class BitgetBroker extends BaseBroker {
           }
         ];
 
-
-        console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Enviando ORDEN DE CIERRE para ${mappedSymbol} (Lado: ${posSideVal.toUpperCase()}, Tamaño: ${absSize}, Margen: ${targetMarginCoin})...`);
-        
-        let res: any = null;
-        let ultimoError: any = null;
-
         for (let idx = 0; idx < variacionesCierre.length; idx++) {
-          const payloadActual = variacionesCierre[idx];
           try {
-            console.log(`[BitgetBroker] Variante de cierre ${idx + 1}/${variacionesCierre.length}:`, JSON.stringify(payloadActual));
-            res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, payloadActual);
+            console.log(`[BitgetBroker] [POST /api/v2/mix/order/place-order] Variante de orden de reducción ${idx + 1}/${variacionesCierre.length}:`, JSON.stringify(variacionesCierre[idx]));
+            res = await this.sendRequest('POST', '/api/v2/mix/order/place-order', {}, variacionesCierre[idx]);
             if (res) break;
           } catch (err: any) {
             ultimoError = err;
-            console.warn(`[BitgetBroker] Variante de cierre ${idx + 1} rechazada (${err.message || err}). Conmutando a siguiente variante...`);
+            console.warn(`[BitgetBroker] Variante de orden de reducción ${idx + 1} rechazada (${err.message || err}).`);
             continue;
           }
         }
+      }
 
-        if (!res) {
-          const msgError = ultimoError?.message || '';
-          if (msgError.includes('22002') || msgError.includes('No position to close')) {
-            console.log('[BitgetBroker] La posición ya no existe en Bitget.');
-            return {
-              exitoso: true,
-              mensajeRespuesta: `La posición para ${mappedSymbol} ya se encuentra cerrada en Bitget.`,
-              timestamp: Date.now(),
-              reintentosRealizados: 0
-            };
-          }
-          throw ultimoError || new Error('No se pudo cerrar la posición en Bitget.');
-        }
-
-        const orderId = res.orderId || res.orderNo || `close_${Math.random().toString(36).substring(2, 10)}`;
-        const sideCloseLabel = pos.size > 0 ? 'SELL' : 'BUY';
+      if (res) {
         return {
           exitoso: true,
-          orderId,
-          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'}. Lado: ${sideCloseLabel}, Símbolo: ${mappedSymbol}.`,
+          orderId: res.orderId || res.orderNo || `close_${Date.now()}`,
+          mensajeRespuesta: `Posición cerrada con éxito en Bitget ${isReal ? 'REAL' : 'DEMO'} (${mappedSymbol}).`,
           timestamp: Date.now(),
           reintentosRealizados: 0
         };
-      };
+      }
 
+      const msgError = ultimoError?.message || '';
+      if (msgError.includes('22002') || msgError.includes('No position to close') || msgError.includes('not exist')) {
+        return {
+          exitoso: true,
+          mensajeRespuesta: `La posición para ${mappedSymbol} ya se encuentra totalmente cerrada en Bitget.`,
+          timestamp: Date.now(),
+          reintentosRealizados: 0
+        };
+      }
+
+      throw ultimoError || new Error(`No fue posible cerrar la posición para ${mappedSymbol} en Bitget.`);
+    };
+
+    try {
       const resultado = await this.runWithExponentialBackoff(transaccionCierre);
       if (resultado.exito && resultado.resultado) {
         return resultado.resultado;
@@ -537,11 +568,12 @@ export class BitgetBroker extends BaseBroker {
         throw new Error(resultado.error?.message || 'Error al cerrar posición');
       }
     } catch (error: any) {
-      console.error(`[BitgetBroker] Error crítico al cerrar la posición: ${error?.message || error}`);
+      console.error(`[BitgetBroker] Error al cerrar posición: ${error?.message || error}`);
       return {
         exitoso: false,
-        mensajeRespuesta: `Falla al cerrar la posición en Bitget Demo: ${error?.message || error}`,
+        mensajeRespuesta: `Error al cerrar posición en Bitget: ${error.message || error}`,
         timestamp: Date.now(),
+        error: 'CLOSE_POSITION_FAILED',
         reintentosRealizados: 0
       };
     }
