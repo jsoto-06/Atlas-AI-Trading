@@ -194,6 +194,7 @@ El sistema incluye un conector nativo para **Bitget Futures V2 API**:
   * **Modo Demo (Sandbox)**: `BITGET_MODO_REAL="false"`, usa contratos `SUSDT-FUTURES` y pares simulados como `SBTCSUSDT`.
   * **Modo Real**: `BITGET_MODO_REAL="true"`, usa contratos `USDT-FUTURES` y pares reales como `BTCUSDT`.
 * **Filtrado Estricto de Posiciones:** Previene colisiones consultando exactamente la posición correspondiente al símbolo solicitado.
+* **Actualización 2026‑08‑12:** Se añadió `marginCoin` y `reduceOnly` al payload de cierre de posición para garantizar idempotencia y correcto funcionamiento en modo Demo y Real.
 
 ---
 
