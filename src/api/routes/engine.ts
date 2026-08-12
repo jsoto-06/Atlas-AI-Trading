@@ -92,12 +92,11 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
 
     try {
       const body = (request.body as any) || {};
-      const symbol = body.symbol || 'BTC/USDT';
-      const side = (body.side === 'SELL' ? 'SELL' : 'BUY') as 'BUY' | 'SELL';
+      const side = (body.side === 'SELL' || body.side === 'SHORT' ? 'SELL' : 'BUY') as 'BUY' | 'SELL';
       const timeframe = '15m';
       const cycleId = `test_order_${Date.now()}`;
 
-      // 2. Registrar decisión en Blackboard para Supervisor
+      // 2. Registrar decisión en Blackboard para Supervisor (desactivando maxDataAgeMs con 0 para orden manual)
       const blackboard = Blackboard.getInstance();
       blackboard.writeAssessment(symbol, timeframe, {
         agentName: 'Supervisor',
@@ -114,7 +113,7 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
           justificacion_cognitiva: `Petición de orden de prueba manual.`
         },
         justification: `Petición manual de prueba (${side}).`
-      });
+      }, 1800000, undefined, 0);
 
       // 3. Ejecutar obligatoriamente el análisis del RiskManagerAgent (NO BYPASS)
       const riskAgent = new RiskManagerAgent();
