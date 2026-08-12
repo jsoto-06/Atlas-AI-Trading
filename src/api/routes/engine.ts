@@ -92,6 +92,7 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
 
     try {
       const body = (request.body as any) || {};
+      const symbol = body.symbol || 'BTC/USDT';
       const side = (body.side === 'SELL' || body.side === 'SHORT' ? 'SELL' : 'BUY') as 'BUY' | 'SELL';
       const timeframe = '15m';
       const cycleId = `test_order_${Date.now()}`;
