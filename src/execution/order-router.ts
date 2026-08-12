@@ -127,14 +127,23 @@ export class OrderRouter {
       const balanceDisponibleUSDT = await this.broker.getBalance('USDT');
 
       const apalancamientoActivo = Math.max(1, leverage);
-      const margenRequerido = max_position_size / apalancamientoActivo;
+      let posicionEfectivaUSD = max_position_size;
+      let margenRequerido = posicionEfectivaUSD / apalancamientoActivo;
+
+      // Auto-escalado de seguridad: si el margen requerido supera el 90% del saldo disponible, ajustar el tamaño
+      const maxMargenPermitido = balanceDisponibleUSDT * 0.90;
+      if (margenRequerido > maxMargenPermitido && balanceDisponibleUSDT > 5) {
+        console.warn(`[OrderRouter] [MARGEN AJUSTADO] Margen inicial requerido ($${margenRequerido.toFixed(2)} USDT) supera el 90% del disponible ($${balanceDisponibleUSDT.toFixed(2)} USDT). Ajustando posición a capacidad del saldo.`);
+        posicionEfectivaUSD = Number((maxMargenPermitido * apalancamientoActivo).toFixed(2));
+        margenRequerido = Number((posicionEfectivaUSD / apalancamientoActivo).toFixed(2));
+      }
 
       console.log(`[OrderRouter] Control de Margen: Balance USDT Disponible: $${balanceDisponibleUSDT.toLocaleString()} USD | Margen Requerido (con apalancamiento ${apalancamientoActivo}x): $${margenRequerido.toLocaleString()} USD`);
 
       if (balanceDisponibleUSDT < margenRequerido) {
         const hasCreds = !!process.env.BITGET_API_KEY && !!process.env.BITGET_API_SECRET && !!process.env.BITGET_PASSPHRASE;
         const msgError = hasCreds 
-          ? `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${max_position_size.toFixed(2)} USD).`
+          ? `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${posicionEfectivaUSD.toFixed(2)} USD).`
           : `Credenciales de Bitget (API Key / Secret / Passphrase) no configuradas en el entorno. Introduce tus claves de Bitget Demo para operar.`;
         console.error(`[OrderRouter] ${msgError}`);
         return {
@@ -152,7 +161,7 @@ export class OrderRouter {
         temporalidad,
         lado: ladoOrden,
         tipo: 'MARKET',
-        tamano: max_position_size,
+        tamano: posicionEfectivaUSD,
         stopLoss: calculated_stop_loss,
         takeProfit: calculated_take_profit,
         leverage: apalancamientoActivo,

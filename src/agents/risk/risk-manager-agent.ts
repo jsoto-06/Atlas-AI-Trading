@@ -177,6 +177,20 @@ export class RiskManagerAgent extends BaseAgent {
       limits = this.DEFAULT_RISK_LIMITS;
     }
 
+    // Intentar sincronizar el capital de la cuenta con el saldo real disponible en Bitget (en entonos no-test)
+    if (process.env.NODE_ENV !== 'test' && process.env.BITGET_API_KEY) {
+      try {
+        const broker = new (await import('../../execution/brokers/bitget-broker.ts')).BitgetBroker();
+        const liveBalance = await broker.getBalance('USDT');
+        if (liveBalance && liveBalance > 10) {
+          limits = { ...limits, accountSizeUSD: liveBalance };
+          console.log(`[RiskManagerAgent] Sincronizado capital base con el saldo real de Bitget: $${liveBalance.toFixed(2)} USDT`);
+        }
+      } catch (balErr) {
+        // Mantiene el fallback configurado
+      }
+    }
+
     // 2. Determinar el usuario activo y calcular los drawdowns reales desde la base de datos (trades cerrados)
     try {
       const filasSettings = await db
