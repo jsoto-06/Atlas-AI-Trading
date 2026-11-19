@@ -1378,7 +1378,7 @@ export default function App() {
     return isDark ? 'text-slate-400 bg-slate-900/60 border-slate-800/40' : 'text-slate-600 bg-slate-100 border-slate-200';
   };
 
-  const filteredAgents = Object.values(agents).filter(agent => {
+  const filteredAgents = (Object.values(agents) as AgentState[]).filter(agent => {
     if (blackboardFilter === 'FAST') return agent.isFastLoop;
     if (blackboardFilter === 'SLOW') return !agent.isFastLoop;
     return true;
@@ -2074,7 +2074,7 @@ export default function App() {
 
                   {/* Agents Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[680px] overflow-y-auto pr-1">
-                    {filteredAgents.map(agent => {
+                    {filteredAgents.map((agent: AgentState) => {
                       const isSelected = selectedAgentName === agent.name;
                       const scoreColor = getScoreColor(agent.score);
 
@@ -2711,7 +2711,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(agentWeights).filter(([_, w]) => w > 0).map(([agentName, weight]) => (
+                  {Object.entries(agentWeights).filter(([_, w]) => (w as number) > 0).map(([agentName, weight]) => (
                     <div
                       key={agentName}
                       className={`p-3.5 rounded-xl border ${
@@ -2720,7 +2720,7 @@ export default function App() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-xs">{agents[agentName as AgentName]?.spanishName || agentName}</span>
-                        <span className="text-xs font-mono font-bold text-cyan-400">{(weight * 100).toFixed(0)}%</span>
+                        <span className="text-xs font-mono font-bold text-cyan-400">{((weight as number) * 100).toFixed(0)}%</span>
                       </div>
                       <input
                         type="range"

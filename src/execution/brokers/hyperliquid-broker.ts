@@ -216,12 +216,14 @@ export class HyperliquidBroker extends BaseBroker {
       }
 
       // Slippage del 1.5% para órdenes a mercado
-      const targetPrice = request.tipo === 'LIMIT' && request.precio
-        ? request.precio
+      const targetSize = request.tamano ?? (request as any).cantidad ?? 0;
+      const limitPrice = request.precioLimite ?? (request as any).precio;
+      const targetPrice = request.tipo === 'LIMIT' && limitPrice
+        ? limitPrice
         : (isBuy ? currentPrice * 1.015 : currentPrice * 0.985);
 
       const formattedPx = formatPrice(targetPrice.toString(), szDecimals);
-      const formattedSz = formatSize(request.cantidad.toString(), szDecimals);
+      const formattedSz = formatSize(targetSize.toString(), szDecimals);
 
       if (parseFloat(formattedSz) <= 0) {
         throw new Error(`El tamaño de orden formateado para ${coin} es inferior al mínimo permitido (${formattedSz}).`);
@@ -243,7 +245,7 @@ export class HyperliquidBroker extends BaseBroker {
             b: isBuy,
             p: formattedPx,
             s: formattedSz,
-            r: request.reduceOnly === true,
+            r: (request as any).reduceOnly === true,
             t: request.tipo === 'LIMIT'
               ? { limit: { tif: 'Gtc' } }
               : { limit: { tif: 'FrontendMarket' } },
@@ -262,19 +264,21 @@ export class HyperliquidBroker extends BaseBroker {
       if (typeof statusObj === 'object' && 'error' in statusObj) {
         return {
           exitoso: false,
-          error: statusObj.error,
-          codigoRespuesta: 'HYPERLIQUID_ERROR'
+          mensajeRespuesta: `Error en Hyperliquid: ${String(statusObj.error)}`,
+          error: String(statusObj.error),
+          reintentosRealizados: 0,
+          timestamp: Date.now()
         };
       }
 
       let orderId = '0';
       let avgPrice = currentPrice;
-      let executedQty = request.cantidad;
+      let executedQty = targetSize;
 
       if (typeof statusObj === 'object' && 'filled' in statusObj) {
         orderId = statusObj.filled.oid.toString();
         avgPrice = parseFloat(statusObj.filled.avgPx) || currentPrice;
-        executedQty = parseFloat(statusObj.filled.totalSz) || request.cantidad;
+        executedQty = parseFloat(statusObj.filled.totalSz) || targetSize;
       } else if (typeof statusObj === 'object' && 'resting' in statusObj) {
         orderId = statusObj.resting.oid.toString();
       }
@@ -284,20 +288,22 @@ export class HyperliquidBroker extends BaseBroker {
       return {
         exitoso: true,
         orderId,
-        clientOid: request.clientOid || cloid,
-        simbolo: request.simbolo,
-        lado: request.lado,
+        clientOrderId: request.clientOid || cloid,
         precioEjecutado: avgPrice,
-        cantidadEjecutada: executedQty,
+        tamanoEjecutado: executedQty,
         comisionUSD: executedQty * avgPrice * 0.00035, // 0.035% fee taker en Hyperliquid
+        mensajeRespuesta: `Orden ejecutada con éxito en Hyperliquid. OID: ${orderId}`,
+        reintentosRealizados: 0,
         timestamp: Date.now()
       };
     }).then(res => {
       if (!res.exito) {
         return {
           exitoso: false,
+          mensajeRespuesta: res.error?.message || 'Fallo de red en Hyperliquid.',
           error: res.error?.message || 'Fallo de red en Hyperliquid.',
-          codigoRespuesta: 'NETWORK_ERROR'
+          reintentosRealizados: res.intentos - 1,
+          timestamp: Date.now()
         };
       }
       return res.resultado!;
@@ -313,7 +319,9 @@ export class HyperliquidBroker extends BaseBroker {
     side: 'BUY' | 'SELL'
   ): Promise<ExecutionResult> {
     const currentPrice = await this.getMarketPrice(request.simbolo);
-    const execPrice = request.tipo === 'LIMIT' && request.precio ? request.precio : currentPrice;
+    const targetSize = request.tamano ?? (request as any).cantidad ?? 0;
+    const limitPrice = request.precioLimite ?? (request as any).precio;
+    const execPrice = request.tipo === 'LIMIT' && limitPrice ? limitPrice : currentPrice;
     const clientOid = request.clientOid || `sim_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const orderId = `hl_sim_${Date.now()}`;
 
@@ -321,19 +329,19 @@ export class HyperliquidBroker extends BaseBroker {
     const existing = this.simPositions.get(coin);
     if (existing) {
       if ((existing.side === 'long' && side === 'SELL') || (existing.side === 'short' && side === 'BUY')) {
-        const netSize = existing.size - request.cantidad;
+        const netSize = existing.size - targetSize;
         if (netSize <= 0.00001) {
           this.simPositions.delete(coin);
         } else {
           existing.size = netSize;
         }
       } else {
-        existing.size += request.cantidad;
+        existing.size += targetSize;
       }
     } else {
       this.simPositions.set(coin, {
         symbol: coin,
-        size: request.cantidad,
+        size: targetSize,
         entryPrice: execPrice,
         side: side === 'BUY' ? 'long' : 'short',
         timestamp: Date.now()
@@ -343,12 +351,10 @@ export class HyperliquidBroker extends BaseBroker {
     return {
       exitoso: true,
       orderId,
-      clientOid,
-      simbolo: request.simbolo,
-      lado: request.lado,
+      clientOrderId: clientOid,
       precioEjecutado: execPrice,
-      cantidadEjecutada: request.cantidad,
-      comisionUSD: request.cantidad * execPrice * 0.00035,
+      tamanoEjecutado: targetSize,
+      comisionUSD: targetSize * execPrice * 0.00035,
       mensajeRespuesta: 'Orden ejecutada en Simulación DEX Hyperliquid (Paper Trading con precios L1 en vivo)',
       reintentosRealizados: 0,
       timestamp: Date.now()
@@ -439,10 +445,11 @@ export class HyperliquidBroker extends BaseBroker {
       return {
         exitoso: true,
         orderId: 'no_pos_to_close',
-        simbolo: symbol,
-        lado: 'SELL',
+        clientOrderId: 'no_pos_to_close',
         precioEjecutado: 0,
-        cantidadEjecutada: 0,
+        tamanoEjecutado: 0,
+        mensajeRespuesta: 'No hay posición abierta para cerrar.',
+        reintentosRealizados: 0,
         timestamp: Date.now()
       };
     }
@@ -452,11 +459,12 @@ export class HyperliquidBroker extends BaseBroker {
 
     return this.executeOrder({
       simbolo: symbol,
+      temporalidad: '15m',
       lado: closeSide,
       tipo: 'MARKET',
-      cantidad: pos.size,
-      reduceOnly: true
-    });
+      tamano: pos.size,
+      timestamp: Date.now()
+    } as any);
   }
 
   /**
@@ -472,15 +480,18 @@ export class HyperliquidBroker extends BaseBroker {
         oid: cloid
       });
 
-      if (!status || status.status === 'unknownOid') {
+      if (!status || (status as any).status === 'unknownOid') {
         return null;
       }
 
+      const orderData = (status as any).order;
+      const innerStatus = orderData?.status || 'open';
+
       return {
         clientOid,
-        status: status.status,
-        state: status.status === 'filled' ? 'filled' : status.status === 'open' ? 'live' : 'canceled',
-        order: status.order
+        status: innerStatus,
+        state: innerStatus === 'filled' ? 'filled' : innerStatus === 'open' ? 'live' : 'canceled',
+        order: (status as any).order
       };
     } catch {
       return null;
