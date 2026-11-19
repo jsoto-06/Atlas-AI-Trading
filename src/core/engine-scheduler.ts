@@ -74,7 +74,8 @@ export class EngineScheduler {
   }
 
   /**
-   * Registra los 11 agentes activos en el pipeline del orquestador.
+   * Registra los agentes activos en el pipeline del orquestador.
+   * El agente de Noticias (NewsAgent) se desactiva explícitamente a petición del usuario.
    */
   private registerActiveAgents(): void {
     this.orchestrator.registerAgent(new TechnicalAnalystAgent());
@@ -83,7 +84,7 @@ export class EngineScheduler {
     this.orchestrator.registerAgent(new LiquidationAgent());
     this.orchestrator.registerAgent(new DivergenceAgent());
     this.orchestrator.registerAgent(new SentimentAgent());
-    this.orchestrator.registerAgent(new NewsAgent());
+    // this.orchestrator.registerAgent(new NewsAgent()); // Desactivado por petición del usuario
     this.orchestrator.registerAgent(new OnChainAgent());
     this.orchestrator.registerAgent(new LearningAgent());
     this.orchestrator.registerAgent(new RiskManagerAgent());
@@ -116,7 +117,6 @@ export class EngineScheduler {
         'Liquidation',
         'Divergence',
         'Sentiment',
-        'News',
         'OnChain',
         'Learning',
         'RiskManager',
@@ -348,6 +348,32 @@ export class EngineScheduler {
 
     try {
       const marketTick = await this.fetchMarketSnapshot(this.symbol);
+
+      // 0. Monitor de Stop Loss y Take Profit para posición activa existente
+      try {
+        const currentPos = await this.broker.getPosition(this.symbol);
+        if (currentPos && Math.abs(currentPos.size) > 0.00001) {
+          const side = currentPos.holdSide ? currentPos.holdSide.toLowerCase() : (currentPos.size > 0 ? 'long' : 'short');
+          const entryPrice = currentPos.entryPrice;
+          const currentPrice = marketTick.price;
+          const pnlPct = side === 'long'
+            ? ((currentPrice - entryPrice) / entryPrice) * 100 * 10
+            : ((entryPrice - currentPrice) / entryPrice) * 100 * 10;
+
+          // Take Profit (+2.5% apalancado) o Stop Loss (-1.8% apalancado)
+          if (pnlPct >= 2.5) {
+            console.log(`[EngineScheduler] [TAKE PROFIT ALCANZADO] PnL: +${pnlPct.toFixed(2)}%. Cerrando posición...`);
+            await this.broker.closePosition(this.symbol);
+            await this.logCycle('INFO', `[TAKE PROFIT EJECUTADO] Posición cerrada con beneficio de +${pnlPct.toFixed(2)}% ($${(currentPos.unrealizedPnl || 0).toFixed(2)} USD).`);
+          } else if (pnlPct <= -1.8) {
+            console.log(`[EngineScheduler] [STOP LOSS ALCANZADO] PnL: ${pnlPct.toFixed(2)}%. Cerrando posición de protección...`);
+            await this.broker.closePosition(this.symbol);
+            await this.logCycle('WARN', `[STOP LOSS EJECUTADO] Posición cerrada para preservar capital: ${pnlPct.toFixed(2)}% ($${(currentPos.unrealizedPnl || 0).toFixed(2)} USD).`);
+          }
+        }
+      } catch (posCheckErr) {
+        // Silencioso
+      }
 
       // 1. Ejecutar el pipeline real de agentes
       await this.orchestrator.triggerWorkflow(this.symbol, this.timeframe, marketTick, cycleId);

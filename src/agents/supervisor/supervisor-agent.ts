@@ -56,14 +56,14 @@ export class SupervisorAgent extends BaseAgent {
 
   // Pesos base del ecosistema analítico (deben sumar 1.0)
   private readonly BASE_WEIGHTS: Record<AgentName, number> = {
-    TechnicalAnalyst: 0.15,
-    OrderFlow: 0.20,
-    Liquidation: 0.15,
-    OnChain: 0.15,
-    Correlation: 0.10,
+    OrderFlow: 0.24,
+    TechnicalAnalyst: 0.20,
+    Liquidation: 0.16,
+    OnChain: 0.12,
+    Correlation: 0.12,
     Divergence: 0.10,
-    Sentiment: 0.08,
-    News: 0.07,
+    Sentiment: 0.06,
+    News: 0.00, // DESACTIVADO POR PETICIÓN DEL USUARIO
     Supervisor: 0, // El supervisor no se pondera a sí mismo
     Backtesting: 0,
     RiskManager: 0,

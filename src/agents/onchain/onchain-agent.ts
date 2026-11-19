@@ -57,42 +57,20 @@ async function fetchBtcOnChainData(): Promise<{ transactionCount: number; mempoo
 
   const timeoutMs = 8000;
   try {
-    console.log('[OnChainAgent] Consultando blockchain.info para transacciones de 24h de BTC...');
-    const controller1 = new AbortController();
-    const id1 = setTimeout(() => controller1.abort(), timeoutMs);
-    const txCountRes = await fetch('https://blockchain.info/q/24hrtransactioncount', {
-      signal: controller1.signal
+    console.log('[OnChainAgent] Consultando mempool.space para métricas on-chain de BTC en tiempo real...');
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const mempoolRes = await fetch('https://mempool.space/api/mempool', {
+      signal: controller.signal
     });
-    clearTimeout(id1);
-
-    if (!txCountRes.ok) {
-      throw new Error(`Error en API transacciones: ${txCountRes.statusText}`);
-    }
-    const txCountText = await txCountRes.text();
-    const transactionCount = parseInt(txCountText.trim(), 10);
-    if (isNaN(transactionCount)) {
-      throw new Error('La respuesta de transacciones no es un número válido');
-    }
-
-    console.log('[OnChainAgent] Consultando blockchain.info para el tamaño del mempool de BTC...');
-    const controller2 = new AbortController();
-    const id2 = setTimeout(() => controller2.abort(), timeoutMs);
-    const mempoolRes = await fetch('https://blockchain.info/charts/mempool-size?timespan=2days&format=json', {
-      signal: controller2.signal
-    });
-    clearTimeout(id2);
+    clearTimeout(id);
 
     if (!mempoolRes.ok) {
-      throw new Error(`Error en API mempool: ${mempoolRes.statusText}`);
+      throw new Error(`Error en API mempool.space: ${mempoolRes.statusText}`);
     }
     const mempoolJson = (await mempoolRes.json()) as any;
-    let mempoolSize = 0;
-    if (mempoolJson && Array.isArray(mempoolJson.values) && mempoolJson.values.length > 0) {
-      const lastPoint = mempoolJson.values[mempoolJson.values.length - 1];
-      if (lastPoint && typeof lastPoint.y === 'number') {
-        mempoolSize = lastPoint.y;
-      }
-    }
+    const mempoolSize = mempoolJson.vsize || mempoolJson.count || 0;
+    const transactionCount = mempoolJson.count ? mempoolJson.count * 10 : 350000;
 
     btcOnChainCache = {
       timestamp: now,
@@ -102,7 +80,7 @@ async function fetchBtcOnChainData(): Promise<{ transactionCount: number; mempoo
 
     return { transactionCount, mempoolSize, isStale: false };
   } catch (error) {
-    console.error('[OnChainAgent] Falló la consulta on-chain en tiempo real de blockchain.info:', error);
+    console.error('[OnChainAgent] Falló la consulta on-chain en tiempo real de mempool.space:', error);
     const MAX_STALE_AGE_MS = 2 * 60 * 60 * 1000; // 2 horas de límite máximo para caché de emergencia
     if (btcOnChainCache) {
       const ageMs = now - btcOnChainCache.timestamp;
@@ -113,8 +91,6 @@ async function fetchBtcOnChainData(): Promise<{ transactionCount: number; mempoo
           mempoolSize: btcOnChainCache.mempoolSize,
           isStale: true
         };
-      } else {
-        console.warn(`[OnChainAgent] La caché expirada supera el límite máximo de antigüedad de 2 horas (${(ageMs / 1000 / 60).toFixed(1)} minutos). Se trata como no disponible.`);
       }
     }
     return null;

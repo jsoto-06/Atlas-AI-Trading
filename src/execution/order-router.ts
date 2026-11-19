@@ -123,6 +123,32 @@ export class OrderRouter {
 
       const ladoOrden: OrderSide = decisionSupervisor as OrderSide;
 
+      // 4.1. COMPROBACIÓN DE POSICIÓN ACTIVA (Anti-Stacking & Rotación)
+      // Si ya hay una posición abierta en la misma dirección, se mantiene (HOLD) sin enviar nuevas órdenes cada minuto.
+      try {
+        const activePosition = await this.broker.getPosition(simbolo);
+        if (activePosition && Math.abs(activePosition.size) > 0.00001) {
+          const activeSide: OrderSide = activePosition.holdSide
+            ? (activePosition.holdSide.toLowerCase() === 'short' ? 'SELL' : 'BUY')
+            : (activePosition.size > 0 ? 'BUY' : 'SELL');
+
+          if (activeSide === ladoOrden) {
+            console.log(`[OrderRouter] [POSICIÓN YA ACTIVA] Posición ${activeSide} ya abierta para ${simbolo} (${activePosition.size} unidades @ $${activePosition.entryPrice}). Manteniendo posición existente (HOLD sin sobre-operar).`);
+            return {
+              exitoso: true,
+              mensajeRespuesta: `Posición ${activeSide} ya activa (${activePosition.size} @ $${activePosition.entryPrice}). Manteniendo posición (HOLD).`,
+              timestamp: Date.now(),
+              reintentosRealizados: 0
+            };
+          } else {
+            console.log(`[OrderRouter] [ROTACIÓN DE TENDENCIA] Señal contraria detectada (${ladoOrden} vs posición previa ${activeSide}). Cerrando posición previa a mercado...`);
+            await this.broker.closePosition(simbolo);
+          }
+        }
+      } catch (posCheckErr: any) {
+        console.warn(`[OrderRouter] Aviso al verificar posición activa: ${posCheckErr.message || posCheckErr}`);
+      }
+
       // 5. Consultar y verificar el balance de colateral disponible en el exchange
       const marginAsset = 'USDT';
       console.log(`[OrderRouter] Verificando balance de margen disponible para ${marginAsset} en ${this.broker.nombreBroker}...`);

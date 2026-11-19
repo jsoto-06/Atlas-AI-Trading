@@ -156,6 +156,22 @@ export default function App() {
     createdAt: string;
   }>>([]);
 
+  // Closed Trades with Realized PnL from Postgres DB
+  const [closedTrades, setClosedTrades] = useState<Array<{
+    id: number;
+    symbol: string;
+    side: string;
+    leverage: number;
+    entryPrice: string;
+    exitPrice: string;
+    quantity: string;
+    pnl: string;
+    pnlPercentage: string;
+    entryTime: string;
+    exitTime: string;
+  }>>([]);
+  const [historyViewTab, setHistoryViewTab] = useState<'orders' | 'trades'>('orders');
+
   // Live Audit Logs Array
   const [logs, setLogs] = useState<SimulatedLog[]>([
     {
@@ -434,6 +450,7 @@ export default function App() {
         setAgents(prev => {
           const next = { ...prev };
           for (const [key, item] of Object.entries(assessments)) {
+            if (key === 'News') continue; // Desactivado por petición del usuario
             const agentKey = key as AgentName;
             if (next[agentKey] && (item as any)?.value) {
               const val = (item as any).value;
@@ -546,15 +563,25 @@ export default function App() {
   const fetchOrdersHistory = async () => {
     if (!adminToken) return;
     try {
-      const res = await fetch('/api/v1/telemetry/orders?limit=30', {
-        headers: {
-          'Authorization': `Bearer ${adminToken}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const [ordersRes, tradesRes] = await Promise.all([
+        fetch('/api/v1/telemetry/orders?limit=30', {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        }),
+        fetch('/api/v1/telemetry/trades?limit=30', {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        })
+      ]);
+
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
         if (Array.isArray(data)) {
           setOrdersHistory(data);
+        }
+      }
+      if (tradesRes.ok) {
+        const tData = await tradesRes.json();
+        if (Array.isArray(tData)) {
+          setClosedTrades(tData);
         }
       }
     } catch {
@@ -605,14 +632,14 @@ export default function App() {
     News: {
       name: 'News',
       spanishName: 'Analista de Noticias',
-      description: 'Escanea noticias macroeconómicas y cripto para evaluar el impacto inmediato en el mercado.',
+      description: 'Agente desactivado a petición del usuario. No interviene en la toma de decisiones.',
       isFastLoop: false,
-      status: 'IDLE',
+      status: 'OFFLINE',
       score: 0,
       confidence: 0,
-      lastUpdated: 'Sin datos',
-      justification: 'Esperando noticias frescas del feed.',
-      details: { fed_sentiment: 'Neutral', regulatory_risk: 'Bajo', macro_impact: 'Ninguno' }
+      lastUpdated: 'Desactivado',
+      justification: 'Desactivado por configuración del usuario.',
+      details: { estado: 'DESACTIVADO' }
     },
     Sentiment: {
       name: 'Sentiment',
@@ -2357,76 +2384,160 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Historial de Órdenes Despachadas (Auditoría en PostgreSQL) */}
+                {/* Historial de Auditoría en Base de Datos (Órdenes & Trades Cerrados) */}
                 <div className={`p-5 rounded-2xl border transition-all ${
                   isDark ? 'bg-[#0c0e18] border-[#181c30]' : 'bg-white border-slate-200 shadow-sm'
                 }`}>
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-inherit">
-                    <span className="font-display font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-cyan-400" />
-                      Historial de Órdenes en Base de Datos ({ordersHistory.length})
-                    </span>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-inherit">
+                    <div className="flex items-center gap-1 font-mono text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setHistoryViewTab('orders')}
+                        className={`px-2.5 py-1 rounded transition-all flex items-center gap-1.5 ${
+                          historyViewTab === 'orders'
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Órdenes Despachadas ({ordersHistory.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryViewTab('trades')}
+                        className={`px-2.5 py-1 rounded transition-all flex items-center gap-1.5 ${
+                          historyViewTab === 'trades'
+                            ? 'bg-emerald-600 text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5" />
+                        <span>Trades Cerrados PnL ({closedTrades.length})</span>
+                      </button>
+                    </div>
+
                     <button
                       type="button"
                       onClick={fetchOrdersHistory}
-                      className="text-[10px] font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+                      className="text-[10px] font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors self-end sm:self-auto"
                     >
                       <RefreshCw className="w-3 h-3" />
                       Actualizar
                     </button>
                   </div>
 
-                  {ordersHistory.length > 0 ? (
-                    <div className="overflow-x-auto max-h-[260px] overflow-y-auto">
-                      <table className="w-full font-mono text-xs text-left">
-                        <thead>
-                          <tr className={`border-b text-[10px] uppercase text-slate-400 ${
-                            isDark ? 'border-slate-800' : 'border-slate-200'
-                          }`}>
-                            <th className="py-2 px-2">Hora</th>
-                            <th className="py-2 px-2">Símbolo</th>
-                            <th className="py-2 px-2">Lado</th>
-                            <th className="py-2 px-2">Apal.</th>
-                            <th className="py-2 px-2">Estado</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/20">
-                          {ordersHistory.map(ord => (
-                            <tr key={ord.id} className="hover:bg-white/5 transition-colors">
-                              <td className="py-2 px-2 text-slate-400 text-[11px]">
-                                {new Date(ord.createdAt).toLocaleTimeString()}
-                              </td>
-                              <td className="py-2 px-2 font-bold">{ord.symbol}</td>
-                              <td className="py-2 px-2">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  ord.side === 'BUY'
-                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                    : 'bg-rose-500/20 text-rose-400'
-                                }`}>
-                                  {ord.side}
-                                </span>
-                              </td>
-                              <td className="py-2 px-2 text-slate-300">{ord.leverage}x</td>
-                              <td className="py-2 px-2">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  ord.status === 'FILLED'
-                                    ? 'bg-cyan-500/20 text-cyan-400'
-                                    : ord.status === 'CREATED'
-                                      ? 'bg-amber-500/20 text-amber-400'
-                                      : 'bg-slate-500/20 text-slate-400'
-                                }`}>
-                                  {ord.status}
-                                </span>
-                              </td>
+                  {historyViewTab === 'orders' ? (
+                    ordersHistory.length > 0 ? (
+                      <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+                        <table className="w-full font-mono text-xs text-left">
+                          <thead>
+                            <tr className={`border-b text-[10px] uppercase text-slate-400 ${
+                              isDark ? 'border-slate-800' : 'border-slate-200'
+                            }`}>
+                              <th className="py-2 px-2">Hora</th>
+                              <th className="py-2 px-2">Símbolo</th>
+                              <th className="py-2 px-2">Operación</th>
+                              <th className="py-2 px-2">Apal.</th>
+                              <th className="py-2 px-2">Estado</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/20">
+                            {ordersHistory.map(ord => (
+                              <tr key={ord.id} className="hover:bg-white/5 transition-colors">
+                                <td className="py-2 px-2 text-slate-400 text-[11px]">
+                                  {new Date(ord.createdAt).toLocaleTimeString()}
+                                </td>
+                                <td className="py-2 px-2 font-bold">{ord.symbol}</td>
+                                <td className="py-2 px-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    ord.side === 'BUY'
+                                      ? 'bg-emerald-500/20 text-emerald-400'
+                                      : 'bg-rose-500/20 text-rose-400'
+                                  }`}>
+                                    {ord.side}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-slate-300">{ord.leverage}x</td>
+                                <td className="py-2 px-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    ord.status === 'FILLED'
+                                      ? 'bg-cyan-500/20 text-cyan-400'
+                                      : ord.status === 'CREATED'
+                                        ? 'bg-amber-500/20 text-amber-400'
+                                        : 'bg-slate-500/20 text-slate-400'
+                                  }`}>
+                                    {ord.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center text-xs font-mono text-slate-400">
+                        No hay órdenes despachadas registradas en la base de datos.
+                      </div>
+                    )
                   ) : (
-                    <div className="py-6 text-center text-xs font-mono text-slate-400">
-                      No hay órdenes registradas aún en PostgreSQL.
-                    </div>
+                    closedTrades.length > 0 ? (
+                      <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+                        <table className="w-full font-mono text-xs text-left">
+                          <thead>
+                            <tr className={`border-b text-[10px] uppercase text-slate-400 ${
+                              isDark ? 'border-slate-800' : 'border-slate-200'
+                            }`}>
+                              <th className="py-2 px-2">Hora Cierre</th>
+                              <th className="py-2 px-2">Símbolo</th>
+                              <th className="py-2 px-2">Dirección</th>
+                              <th className="py-2 px-2">Entrada</th>
+                              <th className="py-2 px-2">Salida</th>
+                              <th className="py-2 px-2">PnL Realizado</th>
+                              <th className="py-2 px-2">Retorno</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/20">
+                            {closedTrades.map(tr => {
+                              const pnlNum = parseFloat(tr.pnl || '0');
+                              const pctNum = parseFloat(tr.pnlPercentage || '0');
+                              return (
+                                <tr key={tr.id} className="hover:bg-white/5 transition-colors">
+                                  <td className="py-2 px-2 text-slate-400 text-[11px]">
+                                    {tr.exitTime ? new Date(tr.exitTime).toLocaleTimeString() : 'En curso'}
+                                  </td>
+                                  <td className="py-2 px-2 font-bold">{tr.symbol}</td>
+                                  <td className="py-2 px-2">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      tr.side === 'LONG'
+                                        ? 'bg-emerald-500/20 text-emerald-400'
+                                        : 'bg-rose-500/20 text-rose-400'
+                                    }`}>
+                                      {tr.side} {tr.leverage}x
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2 text-slate-300">${Number(tr.entryPrice).toFixed(2)}</td>
+                                  <td className="py-2 px-2 text-slate-300">${Number(tr.exitPrice || '0').toFixed(2)}</td>
+                                  <td className="py-2 px-2">
+                                    <span className={`font-bold ${pnlNum >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      {pnlNum >= 0 ? '+' : ''}${pnlNum.toFixed(2)} USD
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <span className={pctNum >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                                      {pctNum >= 0 ? '+' : ''}{pctNum.toFixed(2)}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center text-xs font-mono text-slate-400">
+                        No hay trades cerrados aún. Cuando una posición toque TP/SL o se cierre a mercado, aparecerá registrada aquí con su PnL liquidado.
+                      </div>
+                    )
                   )}
                 </div>
 
