@@ -512,8 +512,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
           }
         }
       }
-    },
-    preHandler: adminAuthHook
+    }
   }, async (request, reply) => {
     try {
       const activeExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'bitget';
@@ -611,7 +610,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 9. GET /api/v1/telemetry/orders
    * Obtiene el historial de órdenes persistidas en PostgreSQL.
    */
-  fastify.get('/orders', { preHandler: adminAuthHook }, async (request, reply) => {
+  fastify.get('/orders', async (request, reply) => {
     try {
       const limit = Math.min(100, Math.max(1, parseInt((request.query as any)?.limit) || 50));
       let orderList: any[] = [];
@@ -635,7 +634,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    * 10. GET /api/v1/telemetry/trades
    * Obtiene el historial de operaciones cerradas con PnL realizado.
    */
-  fastify.get('/trades', { preHandler: adminAuthHook }, async (request, reply) => {
+  fastify.get('/trades', async (request, reply) => {
     try {
       const limit = Math.min(100, Math.max(1, parseInt((request.query as any)?.limit) || 50));
       let tradeList: any[] = [];

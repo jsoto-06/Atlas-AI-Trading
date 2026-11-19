@@ -48,8 +48,9 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
 
   /**
    * GET /api/v1/engine/status
+   * Telemetría de solo lectura del estado del motor (accesible en LAN para visualización móvil).
    */
-  fastify.get('/status', { preHandler: adminAuthHook }, async (request, reply) => {
+  fastify.get('/status', async (request, reply) => {
     return reply.send(engine.getStatus());
   });
 

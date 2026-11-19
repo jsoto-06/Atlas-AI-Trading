@@ -283,12 +283,11 @@ export default function App() {
   const [isTogglingEngine, setIsTogglingEngine] = useState(false);
 
   const fetchEngineStatus = async () => {
-    if (!adminToken) return;
     try {
       const res = await fetch('/api/v1/engine/status', {
-        headers: {
+        headers: adminToken ? {
           'Authorization': `Bearer ${adminToken}`
-        }
+        } : {}
       });
       if (res.ok) {
         const data = await res.json();
@@ -368,12 +367,11 @@ export default function App() {
   };
 
   const fetchBalances = async () => {
-    if (!adminToken) return;
     try {
       const res = await fetch('/api/v1/telemetry/balances', {
-        headers: {
+        headers: adminToken ? {
           'Authorization': `Bearer ${adminToken}`
-        }
+        } : {}
       });
       if (res.ok) {
         const data = await res.json();
@@ -561,15 +559,11 @@ export default function App() {
   };
 
   const fetchOrdersHistory = async () => {
-    if (!adminToken) return;
     try {
+      const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
       const [ordersRes, tradesRes] = await Promise.all([
-        fetch('/api/v1/telemetry/orders?limit=30', {
-          headers: { 'Authorization': `Bearer ${adminToken}` }
-        }),
-        fetch('/api/v1/telemetry/trades?limit=30', {
-          headers: { 'Authorization': `Bearer ${adminToken}` }
-        })
+        fetch('/api/v1/telemetry/orders?limit=30', { headers }),
+        fetch('/api/v1/telemetry/trades?limit=30', { headers })
       ]);
 
       if (ordersRes.ok) {
@@ -590,20 +584,20 @@ export default function App() {
   };
 
   useEffect(() => {
+    fetchBalances();
+    fetchEngineStatus();
+    fetchTelemetryState();
+    fetchOrdersHistory();
     if (adminToken) {
       fetchApiConfig();
+    }
+    const interval = setInterval(() => {
       fetchBalances();
       fetchEngineStatus();
       fetchTelemetryState();
       fetchOrdersHistory();
-      const interval = setInterval(() => {
-        fetchBalances();
-        fetchEngineStatus();
-        fetchTelemetryState();
-        fetchOrdersHistory();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
+    }, 5000);
+    return () => clearInterval(interval);
   }, [adminToken, symbol, timeframe]);
 
   useEffect(() => {
