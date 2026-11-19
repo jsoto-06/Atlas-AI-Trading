@@ -195,7 +195,7 @@ Reglas críticas de negocio:
 - Evita redundancias de sesgos e identifica trampas sintácticas de manera rigurosa.`;
 
         const response = await client.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: 'gemini-2.5-flash',
           contents: [
             {
               text: `Métricas reales de sentimiento de Fear & Greed Index:\n${JSON.stringify(fuentesSociales, null, 2)}`

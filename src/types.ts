@@ -124,9 +124,18 @@ export interface Position {
 // ============================================================================
 
 export interface ApiConfigState {
+  activeExchange: 'bitget' | 'kraken' | 'hyperliquid';
+  // Bitget
   apiKey: string;
   apiSecret: string;
   passphrase: string;
   modoReal: boolean; // false = MODO SIMULACIÓN (SANDBOX LOCAL), true = MODO OPERATIVO REAL (FUTUROS EN VIVO)
+  // Kraken
+  krakenApiKey: string;
+  krakenApiSecret: string;
+  krakenModoReal: boolean; // false = DEMO / SANDBOX LOCAL, true = FUTUROS REALES KRAKEN
+  // Hyperliquid
+  hyperliquidPrivateKey?: string;
+  hyperliquidModoReal?: boolean; // false = TESTNET SANDBOX FAUCET, true = MAINNET DEX L1
 }
 

@@ -10,6 +10,7 @@ import { PerformanceReport } from '../analytics/types.ts';
  */
 export interface BacktestConfig {
   readonly symbol: string;                  // Símbolo del activo (ej: "BTC/USDT")
+  readonly timeframe?: string;              // Temporalidad ("15m", "1h", etc.)
   readonly start_time: number;              // Timestamp de inicio en milisegundos
   readonly end_time: number;                // Timestamp de fin en milisegundos
   readonly initial_balance: number;         // Balance de capital inicial (ej: 100 USD)

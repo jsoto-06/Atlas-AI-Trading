@@ -4,7 +4,8 @@
  */
 
 import { OrderRequest, ExecutionResult } from './types.ts';
-import { BitgetBroker } from './brokers/bitget-broker.ts';
+import { IExchangeBroker } from './brokers/types.ts';
+import { BrokerFactory } from './brokers/broker-factory.ts';
 import { db } from '../db/index.ts';
 import { orders } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
@@ -42,12 +43,12 @@ export interface ManagedOrder {
 }
 
 export class OrderManager {
-  private broker: BitgetBroker;
+  private broker: IExchangeBroker;
   private memoryStore: Map<string, ManagedOrder> = new Map(); // clientOid -> ManagedOrder
   private signalMap: Map<string, string> = new Map(); // signalId -> clientOid
 
-  constructor(broker?: BitgetBroker) {
-    this.broker = broker || new BitgetBroker();
+  constructor(broker?: IExchangeBroker) {
+    this.broker = broker || BrokerFactory.getDefaultBroker();
   }
 
   /**
@@ -250,7 +251,7 @@ export class OrderManager {
 
     // 3. Si la orden está en estado UNKNOWN (timeout previo), consultar primero al exchange por el clientOid
     if (order.status === 'UNKNOWN' || order.status === 'SUBMITTING') {
-      console.log(`[OrderManager] Orden en estado '${order.status}' detectada. Verificando estado en Bitget por clientOid (${order.clientOid})...`);
+      console.log(`[OrderManager] Orden en estado '${order.status}' detectada. Verificando estado en ${this.broker.nombreBroker} por clientOid (${order.clientOid})...`);
       const exchangeOrder = await this.broker.getOrderByClientOid(order.symbol, order.clientOid);
 
       if (exchangeOrder && exchangeOrder.orderId) {
@@ -264,7 +265,7 @@ export class OrderManager {
           clientOrderId: order.clientOid,
           precioEjecutado: parseFloat(exchangeOrder.priceAvg || exchangeOrder.price || '0'),
           tamanoEjecutado: parseFloat(exchangeOrder.size || order.size.toString()),
-          mensajeRespuesta: `Orden recuperada de Bitget sin duplicación [clientOid: ${order.clientOid}]`,
+          mensajeRespuesta: `Orden recuperada de ${this.broker.nombreBroker} sin duplicación [clientOid: ${order.clientOid}]`,
           timestamp: Date.now(),
           reintentosRealizados: order.retryCount
         };

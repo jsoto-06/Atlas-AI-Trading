@@ -4,7 +4,8 @@
  */
 
 import { RiskManagerAnalystOutput } from '../agents/risk/types.ts';
-import { BitgetBroker } from './brokers/bitget-broker.ts';
+import { IExchangeBroker } from './brokers/types.ts';
+import { BrokerFactory } from './brokers/broker-factory.ts';
 import { OrderManager } from './order-manager.ts';
 import { OrderRequest, ExecutionResult, OrderSide } from './types.ts';
 import { Blackboard } from '../core/blackboard.ts';
@@ -14,20 +15,20 @@ import { Blackboard } from '../core/blackboard.ts';
  * 
  * Actúa como el cerebro del Fast-Loop de ejecución del sistema reactivo.
  * Su responsabilidad consiste en recibir los informes validados por el firewall de riesgos
- * (RiskManagerAnalystOutput), verificar el balance disponible en el broker (BitgetBroker),
+ * (RiskManagerAnalystOutput), verificar el balance disponible en el broker activo (IExchangeBroker),
  * realizar el mapeo inmutable a un contrato de orden (OrderRequest) y despacharla a través
  * del OrderManager con garantía estricta de idempotencia, clientOid persistido en DB
  * y sincronización de apalancamiento en el exchange.
  */
 export class OrderRouter {
-  private broker: BitgetBroker;
+  private broker: IExchangeBroker;
   private orderManager: OrderManager;
   private blackboard: Blackboard;
   private processedSignals: Set<string> = new Set(); // Cache de idempotencia rápida en memoria
   private symbolLocks: Map<string, Promise<void>> = new Map(); // Locks por símbolo para prevenir concurrencia
 
-  constructor(broker?: BitgetBroker, orderManager?: OrderManager) {
-    this.broker = broker || new BitgetBroker();
+  constructor(broker?: IExchangeBroker, orderManager?: OrderManager) {
+    this.broker = broker || BrokerFactory.getDefaultBroker();
     this.orderManager = orderManager || new OrderManager(this.broker);
     this.blackboard = Blackboard.getInstance();
   }
@@ -122,9 +123,10 @@ export class OrderRouter {
 
       const ladoOrden: OrderSide = decisionSupervisor as OrderSide;
 
-      // 5. Consultar y verificar el balance de colateral disponible en Bitget
-      console.log(`[OrderRouter] Verificando balance de margen disponible para USDT en Bitget...`);
-      const balanceDisponibleUSDT = await this.broker.getBalance('USDT');
+      // 5. Consultar y verificar el balance de colateral disponible en el exchange
+      const marginAsset = 'USDT';
+      console.log(`[OrderRouter] Verificando balance de margen disponible para ${marginAsset} en ${this.broker.nombreBroker}...`);
+      const balanceDisponibleUSDT = await this.broker.getBalance(marginAsset);
 
       const apalancamientoActivo = Math.max(1, leverage);
       let posicionEfectivaUSD = max_position_size;
@@ -133,24 +135,24 @@ export class OrderRouter {
       // Auto-escalado de seguridad: si el margen requerido supera el 90% del saldo disponible, ajustar el tamaño
       const maxMargenPermitido = balanceDisponibleUSDT * 0.90;
       if (margenRequerido > maxMargenPermitido && balanceDisponibleUSDT > 5) {
-        console.warn(`[OrderRouter] [MARGEN AJUSTADO] Margen inicial requerido ($${margenRequerido.toFixed(2)} USDT) supera el 90% del disponible ($${balanceDisponibleUSDT.toFixed(2)} USDT). Ajustando posición a capacidad del saldo.`);
+        console.warn(`[OrderRouter] [MARGEN AJUSTADO] Margen inicial requerido ($${margenRequerido.toFixed(2)} ${marginAsset}) supera el 90% del disponible ($${balanceDisponibleUSDT.toFixed(2)} ${marginAsset}). Ajustando posición a capacidad del saldo.`);
         posicionEfectivaUSD = Number((maxMargenPermitido * apalancamientoActivo).toFixed(2));
         margenRequerido = Number((posicionEfectivaUSD / apalancamientoActivo).toFixed(2));
       }
 
-      console.log(`[OrderRouter] Control de Margen: Balance USDT Disponible: $${balanceDisponibleUSDT.toLocaleString()} USD | Margen Requerido (con apalancamiento ${apalancamientoActivo}x): $${margenRequerido.toLocaleString()} USD`);
+      console.log(`[OrderRouter] Control de Margen: Balance ${marginAsset} Disponible: $${balanceDisponibleUSDT.toLocaleString()} USD | Margen Requerido (con apalancamiento ${apalancamientoActivo}x): $${margenRequerido.toLocaleString()} USD`);
 
       if (balanceDisponibleUSDT < margenRequerido) {
-        const hasCreds = !!process.env.BITGET_API_KEY && !!process.env.BITGET_API_SECRET && !!process.env.BITGET_PASSPHRASE;
+        const hasCreds = this.broker.isConfigured();
         const msgError = hasCreds 
-          ? `Margen insuficiente en Bitget para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} USDT, Disponible: $${balanceDisponibleUSDT.toFixed(2)} USDT (Tamaño posición: $${posicionEfectivaUSD.toFixed(2)} USD).`
-          : `Credenciales de Bitget (API Key / Secret / Passphrase) no configuradas en el entorno. Introduce tus claves de Bitget Demo para operar.`;
+          ? `Margen insuficiente en ${this.broker.nombreBroker} para abrir la posición. Requerido: $${margenRequerido.toFixed(2)} ${marginAsset}, Disponible: $${balanceDisponibleUSDT.toFixed(2)} ${marginAsset} (Tamaño posición: $${posicionEfectivaUSD.toFixed(2)} USD).`
+          : `Credenciales de ${this.broker.nombreBroker} no configuradas en el entorno. Introduce tus claves de API para operar.`;
         console.error(`[OrderRouter] ${msgError}`);
         return {
           exitoso: false,
           mensajeRespuesta: `Despacho abortado: ${msgError}`,
           timestamp: Date.now(),
-          error: hasCreds ? 'INSUFFICIENT_MARGIN' : 'MISSING_BITGET_CREDENTIALS',
+          error: hasCreds ? 'INSUFFICIENT_MARGIN' : 'MISSING_EXCHANGE_CREDENTIALS',
           reintentosRealizados: 0
         };
       }

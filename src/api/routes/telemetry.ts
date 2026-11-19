@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from 'fs';
+import path from 'path';
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { db } from '../../db/index.ts';
 import { settings, learningPerformance, trades, auditLogs } from '../../db/schema.ts';
@@ -10,7 +12,7 @@ import { settings, learningPerformance, trades, auditLogs } from '../../db/schem
 import { Blackboard } from '../../core/blackboard.ts';
 import { MetricsCalculator } from '../../analytics/metrics-calculator.ts';
 import { eq, desc } from 'drizzle-orm';
-import { BitgetBroker } from '../../execution/brokers/bitget-broker.ts';
+import { BrokerFactory } from '../../execution/brokers/broker-factory.ts';
 
 /**
  * Plugin de rutas Fastify para Telemetría y Conciliación de Estados (solo lectura GET).
@@ -301,20 +303,26 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
 
   /**
    * 5. GET /api/v1/telemetry/config
-   * Recupera la configuración actual de API de Bitget enmascarada para resguardar la seguridad.
+   * Recupera la configuración actual de API (Bitget y Kraken) enmascarada para resguardar la seguridad.
    */
   fastify.get('/config', {
     schema: {
-      description: 'Recupera la configuración actual de API de Bitget enmascarada por seguridad.',
+      description: 'Recupera la configuración actual de API de Bitget y Kraken enmascarada por seguridad.',
       tags: ['telemetria'],
       response: {
         200: {
           type: 'object',
           properties: {
+            activeExchange: { type: 'string' },
             apiKey: { type: 'string' },
             apiSecret: { type: 'string' },
             passphrase: { type: 'string' },
-            modoReal: { type: 'boolean' }
+            modoReal: { type: 'boolean' },
+            krakenApiKey: { type: 'string' },
+            krakenApiSecret: { type: 'string' },
+            krakenModoReal: { type: 'boolean' },
+            hyperliquidPrivateKey: { type: 'string' },
+            hyperliquidModoReal: { type: 'boolean' }
           }
         }
       }
@@ -323,10 +331,16 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
   }, async (request, reply) => {
     try {
       return {
+        activeExchange: (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'bitget',
         apiKey: maskSecretValue(process.env.BITGET_API_KEY),
         apiSecret: maskSecretValue(process.env.BITGET_API_SECRET),
         passphrase: maskSecretValue(process.env.BITGET_PASSPHRASE),
-        modoReal: process.env.BITGET_MODO_REAL === 'true'
+        modoReal: process.env.BITGET_MODO_REAL === 'true',
+        krakenApiKey: maskSecretValue(process.env.KRAKEN_API_KEY),
+        krakenApiSecret: maskSecretValue(process.env.KRAKEN_API_SECRET),
+        krakenModoReal: process.env.KRAKEN_MODO_REAL === 'true',
+        hyperliquidPrivateKey: maskSecretValue(process.env.HYPERLIQUID_PRIVATE_KEY),
+        hyperliquidModoReal: process.env.HYPERLIQUID_MODO_REAL === 'true'
       };
     } catch (error: any) {
       fastify.log.error(`Error en GET /telemetry/config: ${error.message}`);
@@ -336,47 +350,128 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
 
   /**
    * 6. POST /api/v1/telemetry/config
-   * Actualiza dinámicamente las credenciales de API de Bitget y el entorno operativo.
+   * Actualiza dinámicamente las credenciales de API (Bitget y Kraken) y el entorno operativo.
    */
   fastify.post('/config', {
     schema: {
-      description: 'Actualiza dinámicamente las credenciales de API de Bitget y el entorno operativo de forma inmutable.',
+      description: 'Actualiza dinámicamente las credenciales de API de Bitget y Kraken y el entorno operativo.',
       tags: ['telemetria'],
       body: {
         type: 'object',
-        required: ['apiKey', 'apiSecret', 'passphrase', 'modoReal'],
         properties: {
+          activeExchange: { type: 'string' },
           apiKey: { type: 'string' },
           apiSecret: { type: 'string' },
           passphrase: { type: 'string' },
-          modoReal: { type: 'boolean' }
+          modoReal: { type: 'boolean' },
+          krakenApiKey: { type: 'string' },
+          krakenApiSecret: { type: 'string' },
+          krakenModoReal: { type: 'boolean' },
+          hyperliquidPrivateKey: { type: 'string' },
+          hyperliquidModoReal: { type: 'boolean' }
         }
       }
     },
     preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
-      const { apiKey, apiSecret, passphrase, modoReal } = request.body as any;
+      const { 
+        activeExchange,
+        apiKey, 
+        apiSecret, 
+        passphrase, 
+        modoReal,
+        krakenApiKey,
+        krakenApiSecret,
+        krakenModoReal,
+        hyperliquidPrivateKey,
+        hyperliquidModoReal
+      } = request.body as any;
 
+      if (activeExchange && (activeExchange === 'bitget' || activeExchange === 'kraken' || activeExchange === 'hyperliquid')) {
+        process.env.ACTIVE_EXCHANGE = activeExchange;
+        fastify.log.info(`[Telemetry] ACTIVE_EXCHANGE conmutado a: ${activeExchange}`);
+      }
+
+      // Bitget
       if (apiKey && apiKey.trim() !== '' && !apiKey.includes('...')) {
         process.env.BITGET_API_KEY = apiKey.trim();
-        fastify.log.info('BITGET_API_KEY actualizado dinámicamente.');
+        fastify.log.info('[Telemetry] BITGET_API_KEY actualizado dinámicamente.');
       }
       if (apiSecret && apiSecret.trim() !== '' && !apiSecret.includes('...')) {
         process.env.BITGET_API_SECRET = apiSecret.trim();
-        fastify.log.info('BITGET_API_SECRET actualizado dinámicamente.');
+        fastify.log.info('[Telemetry] BITGET_API_SECRET actualizado dinámicamente.');
       }
       if (passphrase && passphrase.trim() !== '' && !passphrase.includes('...')) {
         process.env.BITGET_PASSPHRASE = passphrase.trim();
-        fastify.log.info('BITGET_PASSPHRASE actualizado dinámicamente.');
+        fastify.log.info('[Telemetry] BITGET_PASSPHRASE actualizado dinámicamente.');
+      }
+      if (typeof modoReal === 'boolean') {
+        process.env.BITGET_MODO_REAL = modoReal ? 'true' : 'false';
+        fastify.log.info(`[Telemetry] Entorno operativo Bitget conmutado a: ${modoReal ? 'LIVE' : 'SANDBOX'}`);
       }
 
-      process.env.BITGET_MODO_REAL = modoReal ? 'true' : 'false';
-      fastify.log.info(`Entorno operativo conmutado a: ${modoReal ? 'LIVE' : 'SANDBOX'}`);
+      // Kraken
+      if (krakenApiKey && krakenApiKey.trim() !== '' && !krakenApiKey.includes('...')) {
+        process.env.KRAKEN_API_KEY = krakenApiKey.trim();
+        fastify.log.info('[Telemetry] KRAKEN_API_KEY actualizado dinámicamente.');
+      }
+      if (krakenApiSecret && krakenApiSecret.trim() !== '' && !krakenApiSecret.includes('...')) {
+        process.env.KRAKEN_API_SECRET = krakenApiSecret.trim();
+        fastify.log.info('[Telemetry] KRAKEN_API_SECRET actualizado dinámicamente.');
+      }
+      if (typeof krakenModoReal === 'boolean') {
+        process.env.KRAKEN_MODO_REAL = krakenModoReal ? 'true' : 'false';
+        fastify.log.info(`[Telemetry] Entorno operativo Kraken conmutado a: ${krakenModoReal ? 'LIVE' : 'DEMO/SANDBOX'}`);
+      }
+
+      // Hyperliquid
+      if (hyperliquidPrivateKey && hyperliquidPrivateKey.trim() !== '' && !hyperliquidPrivateKey.includes('...')) {
+        process.env.HYPERLIQUID_PRIVATE_KEY = hyperliquidPrivateKey.trim();
+        fastify.log.info('[Telemetry] HYPERLIQUID_PRIVATE_KEY actualizado dinámicamente.');
+      }
+      if (typeof hyperliquidModoReal === 'boolean') {
+        process.env.HYPERLIQUID_MODO_REAL = hyperliquidModoReal ? 'true' : 'false';
+        fastify.log.info(`[Telemetry] Entorno operativo Hyperliquid conmutado a: ${hyperliquidModoReal ? 'MAINNET DEX' : 'TESTNET'}`);
+      }
+
+      // Persistir variables en .env si el archivo existe
+      try {
+        const envPath = path.resolve(process.cwd(), '.env');
+        if (fs.existsSync(envPath)) {
+          let envContent = fs.readFileSync(envPath, 'utf-8');
+          const updateKey = (key: string, val: string) => {
+            const regex = new RegExp(`^${key}=.*$`, 'm');
+            if (regex.test(envContent)) {
+              envContent = envContent.replace(regex, `${key}="${val}"`);
+            } else {
+              envContent += `\n${key}="${val}"`;
+            }
+          };
+
+          if (activeExchange) updateKey('ACTIVE_EXCHANGE', activeExchange);
+          if (apiKey && !apiKey.includes('...')) updateKey('BITGET_API_KEY', apiKey.trim());
+          if (apiSecret && !apiSecret.includes('...')) updateKey('BITGET_API_SECRET', apiSecret.trim());
+          if (passphrase && !passphrase.includes('...')) updateKey('BITGET_PASSPHRASE', passphrase.trim());
+          if (typeof modoReal === 'boolean') updateKey('BITGET_MODO_REAL', modoReal ? 'true' : 'false');
+          if (krakenApiKey && !krakenApiKey.includes('...')) updateKey('KRAKEN_API_KEY', krakenApiKey.trim());
+          if (krakenApiSecret && !krakenApiSecret.includes('...')) updateKey('KRAKEN_API_SECRET', krakenApiSecret.trim());
+          if (typeof krakenModoReal === 'boolean') updateKey('KRAKEN_MODO_REAL', krakenModoReal ? 'true' : 'false');
+
+          fs.writeFileSync(envPath, envContent, 'utf-8');
+          fastify.log.info('[Telemetry] Configuración persistida en .env exitosamente.');
+        }
+      } catch (envErr: any) {
+        fastify.log.warn(`[Telemetry] Aviso al persistir .env: ${envErr.message}`);
+      }
+
+      // Reset BrokerFactory para que las nuevas credenciales tomen efecto inmediatamente
+      BrokerFactory.reset();
 
       return {
         exitoso: true,
-        mensaje: 'Configuración de API actualizada correctamente en caliente.',
+        activeExchange: process.env.ACTIVE_EXCHANGE || 'bitget',
+        mensaje: 'Configuración de exchanges actualizada correctamente en caliente.',
         timestamp: Date.now()
       };
     } catch (error: any) {
@@ -391,12 +486,13 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
    */
   fastify.get('/balances', {
     schema: {
-      description: 'Obtiene el balance disponible de USDT tanto en Demo como en Cuenta Real de Bitget.',
+      description: 'Obtiene el balance disponible de USDT/USD tanto en Demo como en Cuenta Real del broker activo.',
       tags: ['telemetria'],
       response: {
         200: {
           type: 'object',
           properties: {
+            exchange: { type: 'string' },
             demo: { type: 'number' },
             real: { type: 'number' },
             activeMode: { type: 'string' },
@@ -408,21 +504,33 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
     preHandler: adminAuthHook
   }, async (request, reply) => {
     try {
-      const isReal = process.env.BITGET_MODO_REAL === 'true';
-      const broker = new BitgetBroker();
+      const activeExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'bitget';
+      const isReal = activeExchange === 'hyperliquid'
+        ? process.env.HYPERLIQUID_MODO_REAL === 'true'
+        : activeExchange === 'kraken'
+          ? process.env.KRAKEN_MODO_REAL === 'true'
+          : process.env.BITGET_MODO_REAL === 'true';
+
+      const broker = BrokerFactory.getDefaultBroker();
 
       let demoBalance = 0;
       let realBalance = 0;
 
       if (!isReal) {
         try {
-          demoBalance = await broker.getBalance('USDT');
+          demoBalance = await broker.getBalance(activeExchange === 'hyperliquid' ? 'USDC' : 'USDT');
+          if (demoBalance === 0 && activeExchange === 'kraken') {
+            demoBalance = await broker.getBalance('USD');
+          }
         } catch (e) {
           fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Demo: ${e}`);
         }
       } else {
         try {
-          realBalance = await broker.getBalance('USDT');
+          realBalance = await broker.getBalance(activeExchange === 'hyperliquid' ? 'USDC' : 'USDT');
+          if (realBalance === 0 && activeExchange === 'kraken') {
+            realBalance = await broker.getBalance('USD');
+          }
         } catch (e) {
           fastify.log.warn(`[TelemetryRoutes] Error al consultar balance Real: ${e}`);
         }
@@ -446,6 +554,7 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
       }
 
       return {
+        exchange: activeExchange,
         demo: demoBalance,
         real: realBalance,
         activeMode: isReal ? 'real' : 'demo',

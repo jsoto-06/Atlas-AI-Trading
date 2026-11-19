@@ -282,7 +282,7 @@ Reglas críticas de negocio:
 - Basa tu análisis de manera rigurosa en los datos cuantitativos reales provistos. No inventes transacciones ni datos no proporcionados.`;
 
           const response = await client.models.generateContent({
-            model: 'gemini-3.5-flash',
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 text: `Métricas reales de blockchain.info recolectadas de la red de bloques:\n${JSON.stringify(realData, null, 2)}`

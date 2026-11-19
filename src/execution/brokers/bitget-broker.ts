@@ -6,6 +6,7 @@
 import crypto from 'crypto';
 import { BaseBroker } from './base-broker.ts';
 import { OrderRequest, ExecutionResult } from '../types.ts';
+import { ExchangeId } from './types.ts';
 import { mapSymbol, getProductType } from './bitget-utils.ts';
 
 /**
@@ -16,7 +17,15 @@ import { mapSymbol, getProductType } from './bitget-utils.ts';
  * firmas criptográficas seguras, reintentos con backoff exponencial y recuperación de precios reales.
  */
 export class BitgetBroker extends BaseBroker {
+  public readonly exchangeId: ExchangeId = 'bitget';
   public readonly nombreBroker: string = 'Bitget';
+
+  /**
+   * Valida si las 3 credenciales obligatorias de Bitget están presentes en el entorno.
+   */
+  public isConfigured(): boolean {
+    return !!(process.env.BITGET_API_KEY && process.env.BITGET_API_SECRET && process.env.BITGET_PASSPHRASE);
+  }
 
   // Objeto de configuración de API enmascarado
   private configApi: { apiKey?: string; apiSecret?: string; passphrase?: string } | null = null;

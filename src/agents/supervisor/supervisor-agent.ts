@@ -254,7 +254,7 @@ Reglas Ejecutivas de Decisión:
 5. Devuelve la salida en un JSON estricto con el esquema solicitado. Toda la justificación y análisis de riesgos deben escribirse en CASTELLANO.`;
 
           const response = await client.models.generateContent({
-            model: 'gemini-3.5-flash',
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 text: `Captura del Blackboard actual del sistema reactivo:\n${snapshotTexto}`

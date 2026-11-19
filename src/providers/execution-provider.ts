@@ -4,7 +4,8 @@
  */
 
 import { OrderRequest, ExecutionResult } from '../execution/types.ts';
-import { BitgetBroker } from '../execution/brokers/bitget-broker.ts';
+import { IExchangeBroker } from '../execution/brokers/types.ts';
+import { BrokerFactory } from '../execution/brokers/broker-factory.ts';
 
 export interface IExecutionProvider {
   executeOrder(request: OrderRequest): Promise<ExecutionResult>;
@@ -13,11 +14,11 @@ export interface IExecutionProvider {
   closePosition(symbol: string): Promise<ExecutionResult>;
 }
 
-export class BitgetExecutionProvider implements IExecutionProvider {
-  private broker: BitgetBroker;
+export class LiveExecutionProvider implements IExecutionProvider {
+  private broker: IExchangeBroker;
 
-  constructor(broker?: BitgetBroker) {
-    this.broker = broker || new BitgetBroker();
+  constructor(broker?: IExchangeBroker) {
+    this.broker = broker || BrokerFactory.getDefaultBroker();
   }
 
   public async executeOrder(request: OrderRequest): Promise<ExecutionResult> {
@@ -36,6 +37,9 @@ export class BitgetExecutionProvider implements IExecutionProvider {
     return this.broker.closePosition(symbol);
   }
 }
+
+// Retrocompatibilidad
+export const BitgetExecutionProvider = LiveExecutionProvider;
 
 export class SimulatedExecutionProvider implements IExecutionProvider {
   private balance: number;

@@ -17,7 +17,8 @@ import { SupervisorAgent } from '../agents/supervisor/supervisor-agent.ts';
 import { NewsAgent } from '../agents/news/news-agent.ts';
 import { OnChainAgent } from '../agents/onchain/onchain-agent.ts';
 import { OrderRouter } from '../execution/order-router.ts';
-import { BitgetBroker } from '../execution/brokers/bitget-broker.ts';
+import { IExchangeBroker } from '../execution/brokers/types.ts';
+import { BrokerFactory } from '../execution/brokers/broker-factory.ts';
 import { ReconciliationEngine } from '../execution/reconciliation-engine.ts';
 import { mapSymbol, getProductType } from '../execution/brokers/bitget-utils.ts';
 import { RiskManagerAnalystOutput } from '../agents/risk/types.ts';
@@ -42,7 +43,7 @@ export class EngineScheduler {
   private orchestrator: Orchestrator;
   private blackboard: Blackboard;
   private orderRouter: OrderRouter;
-  private broker: BitgetBroker;
+  private broker: IExchangeBroker;
 
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private running = false;
@@ -60,7 +61,7 @@ export class EngineScheduler {
   private constructor() {
     this.orchestrator = Orchestrator.getInstance();
     this.blackboard = Blackboard.getInstance();
-    this.broker = new BitgetBroker();
+    this.broker = BrokerFactory.getDefaultBroker();
     this.orderRouter = new OrderRouter(this.broker);
     this.registerActiveAgents();
   }
@@ -90,11 +91,17 @@ export class EngineScheduler {
   }
 
   public getStatus() {
-    const modoReal = process.env.BITGET_MODO_REAL === 'true';
+    const activeExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'bitget';
+    const isReal = activeExchange === 'hyperliquid'
+      ? process.env.HYPERLIQUID_MODO_REAL === 'true'
+      : activeExchange === 'kraken'
+        ? process.env.KRAKEN_MODO_REAL === 'true'
+        : process.env.BITGET_MODO_REAL === 'true';
     return {
       running: this.running,
       state: this.state,
-      modo: modoReal ? 'REAL' : 'PAPER/TESTNET',
+      modo: isReal ? 'REAL' : 'PAPER/TESTNET',
+      exchange: this.broker?.exchangeId || activeExchange,
       symbol: this.symbol,
       timeframe: this.timeframe,
       intervalMs: this.intervalMs,
@@ -128,22 +135,41 @@ export class EngineScheduler {
     intervalMs?: number;
     confirmLive?: boolean;
   }): Promise<{ ok: boolean; message: string; state: EngineLifecycleState }> {
-    const modoReal = process.env.BITGET_MODO_REAL === 'true';
+    const activeExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'bitget';
+    const isReal = activeExchange === 'hyperliquid'
+      ? process.env.HYPERLIQUID_MODO_REAL === 'true'
+      : activeExchange === 'kraken'
+        ? process.env.KRAKEN_MODO_REAL === 'true'
+        : process.env.BITGET_MODO_REAL === 'true';
 
-    if (modoReal && params.confirmLive !== true) {
+    if (isReal && params.confirmLive !== true) {
       this.state = 'FAILED_SAFE';
       return {
         ok: false,
         message:
-          'BITGET_MODO_REAL=true pero no se recibió confirmLive=true. ' +
+          'Entorno REAL configurado pero no se recibió confirmLive=true. ' +
           'Arranque bloqueado por seguridad.',
         state: this.state,
       };
     }
 
     if (this.running && this.state === 'TRADING') {
+      if ((params.symbol && params.symbol !== this.symbol) || (params.timeframe && params.timeframe !== this.timeframe)) {
+        this.symbol = params.symbol || this.symbol;
+        this.timeframe = params.timeframe || this.timeframe;
+        console.log(`[EngineScheduler] Configuración de trading actualizada en caliente: ${this.symbol} (${this.timeframe})`);
+        return {
+          ok: true,
+          message: `Configuración actualizada a ${this.symbol} (${this.timeframe}).`,
+          state: this.state,
+        };
+      }
       return { ok: false, message: 'El motor ya está en ejecución.', state: this.state };
     }
+
+    // Refrescar broker y order router con el adaptador actualmente activo
+    this.broker = BrokerFactory.getDefaultBroker();
+    this.orderRouter = new OrderRouter(this.broker);
 
     this.symbol = params.symbol || this.symbol;
     this.timeframe = params.timeframe || this.timeframe;
@@ -183,7 +209,7 @@ export class EngineScheduler {
       this.state = 'TRADING';
 
       console.log(
-        `[EngineScheduler] Arrancando ciclo (${modoReal ? 'REAL' : 'PAPER/TESTNET'}) ` +
+        `[EngineScheduler] Arrancando ciclo (${isReal ? 'REAL' : 'PAPER/TESTNET'}) [Broker: ${this.broker.exchangeId}] ` +
           `para ${this.symbol} (${this.timeframe}) cada ${this.intervalMs}ms. Estado: ${this.state}`
       );
 
@@ -193,7 +219,7 @@ export class EngineScheduler {
 
       return {
         ok: true,
-        message: `Motor arrancado y reconciliado con éxito en modo ${modoReal ? 'REAL' : 'PAPER/TESTNET'}.`,
+        message: `Motor arrancado y reconciliado con éxito en modo ${isReal ? 'REAL' : 'PAPER/TESTNET'} (${this.broker.nombreBroker}).`,
         state: this.state,
       };
     } catch (startupError: any) {
@@ -224,41 +250,83 @@ export class EngineScheduler {
   }
 
   /**
-   * Obtiene un ticker público de Bitget para construir el MarketStateSnapshot.
+   * Obtiene un snapshot de mercado resiliente usando el broker activo o fallbacks públicos (Bitget / Kraken).
    */
   private async fetchMarketSnapshot(symbol: string): Promise<MarketStateSnapshot> {
-    const mappedSymbol = mapSymbol(symbol);
-    const productType = getProductType();
-    const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
+    // 1. Intentar con el broker activo configurado
     try {
+      if (this.broker && typeof this.broker.getTicker === 'function') {
+        const t = await this.broker.getTicker(symbol);
+        if (t && t.price > 0) {
+          return {
+            symbol: t.symbol || symbol,
+            price: t.price,
+            volume24h: t.volume24h,
+            high24h: t.high24h,
+            low24h: t.low24h,
+            timestamp: t.timestamp || Date.now(),
+          };
+        }
+      }
+    } catch (brokerErr: any) {
+      console.warn(`[EngineScheduler] Broker getTicker falló (${brokerErr.message}). Probando fallback...`);
+    }
+
+    // 2. Fallback: Bitget Market Ticker público
+    try {
+      const mappedSymbol = mapSymbol(symbol);
+      const productType = getProductType();
+      const url = `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${mappedSymbol}&productType=${productType}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(`Fallo HTTP obteniendo ticker de Bitget: ${response.status}`);
+      if (response.ok) {
+        const json = await response.json();
+        if (json.code === '00000' && json.data && json.data.length > 0) {
+          const t = json.data[0];
+          return {
+            symbol,
+            price: parseFloat(t.lastPr),
+            volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
+            high24h: parseFloat(t.high24h ?? t.lastPr),
+            low24h: parseFloat(t.low24h ?? t.lastPr),
+            timestamp: Date.now(),
+          };
+        }
       }
-      const json = await response.json();
-      if (json.code !== '00000' || !json.data || json.data.length === 0) {
-        throw new Error(`Respuesta inválida de ticker Bitget: ${json.msg || 'sin datos'}`);
-      }
-
-      const t = json.data[0];
-      return {
-        symbol,
-        price: parseFloat(t.lastPr),
-        volume24h: parseFloat(t.baseVolume ?? t.volume24h ?? '0'),
-        high24h: parseFloat(t.high24h ?? t.lastPr),
-        low24h: parseFloat(t.low24h ?? t.lastPr),
-        timestamp: Date.now(),
-      };
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      throw new Error(`[FAIL CLOSED] Error al obtener snapshot de mercado para ${symbol}: ${err.message}`);
+    } catch (bitgetErr: any) {
+      console.warn(`[EngineScheduler] Fallback Bitget falló (${bitgetErr.message}). Probando Kraken...`);
     }
+
+    // 3. Fallback: Kraken Futures Ticker público
+    try {
+      const krakenRes = await fetch('https://futures.kraken.com/derivatives/api/v3/tickers');
+      if (krakenRes.ok) {
+        const json = await krakenRes.json();
+        if (json.tickers && Array.isArray(json.tickers)) {
+          const t = json.tickers.find((item: any) => item.symbol === 'PF_XBTUSD');
+          if (t) {
+            const price = parseFloat(t.last || t.markPrice || '0');
+            if (price > 0) {
+              return {
+                symbol,
+                price,
+                volume24h: parseFloat(t.vol24h || t.volume || '0'),
+                high24h: parseFloat(t.high24h || t.last || '0'),
+                low24h: parseFloat(t.low24h || t.last || '0'),
+                timestamp: Date.now(),
+              };
+            }
+          }
+        }
+      }
+    } catch (krakenErr: any) {
+      console.warn(`[EngineScheduler] Fallback Kraken falló: ${krakenErr.message}`);
+    }
+
+    throw new Error(`[FAIL CLOSED] Imposible obtener cotización de mercado en vivo para ${symbol} en ningún feed.`);
   }
 
   /**

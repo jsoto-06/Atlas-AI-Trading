@@ -46,7 +46,7 @@ export class BacktestEngine {
   public async runBacktest(config: BacktestConfig): Promise<BacktestResult> {
     console.log(`[BacktestEngine] Iniciando simulación determinista para ${config.symbol} desde ${new Date(config.start_time).toISOString()} hasta ${new Date(config.end_time).toISOString()}`);
 
-    const timeframe = '15m';
+    const timeframe = config.timeframe || '15m';
     const backtestCyclePrefix = `BT_${config.symbol.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
 
     // 1. Obtener velas históricas mediante el Provider con paginación
@@ -212,7 +212,7 @@ export class BacktestEngine {
             exitReason = 'STOP_LOSS';
             closedThisCandle = true;
           } else if (highPrice >= takeProfit) {
-            exitPrice = Math.max(takeProfit, highPrice);
+            exitPrice = takeProfit;
             exitReason = 'TAKE_PROFIT';
             closedThisCandle = true;
           }
@@ -226,7 +226,7 @@ export class BacktestEngine {
             exitReason = 'STOP_LOSS';
             closedThisCandle = true;
           } else if (lowPrice <= takeProfit) {
-            exitPrice = Math.min(takeProfit, lowPrice);
+            exitPrice = takeProfit;
             exitReason = 'TAKE_PROFIT';
             closedThisCandle = true;
           }
@@ -319,10 +319,10 @@ export class BacktestEngine {
         }));
         this.technicalAgent.setMemoryCache(config.symbol, timeframe, candleSlice);
 
-        // Ejecutar agentes en el bucle rápido
+        // Ejecutar pipeline: Analista Técnico -> Supervisor (Consenso) -> RiskManager (Firewall)
         await this.technicalAgent.execute(config.symbol, timeframe, cycleId);
-        await this.riskAgent.execute(config.symbol, timeframe, cycleId);
         await this.supervisorAgent.execute(config.symbol, timeframe, cycleId);
+        await this.riskAgent.execute(config.symbol, timeframe, cycleId);
 
         const snapshot = this.blackboard.getSnapshot(config.symbol, timeframe);
         const riskAssessment = snapshot.assessments['RiskManager'];

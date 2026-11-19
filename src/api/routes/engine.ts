@@ -7,7 +7,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { EngineScheduler } from '../../core/engine-scheduler.ts';
 import { BacktestEngine } from '../../backtesting/engine.ts';
 import { OrderRouter } from '../../execution/order-router.ts';
-import { BitgetBroker } from '../../execution/brokers/bitget-broker.ts';
+import { BrokerFactory } from '../../execution/brokers/broker-factory.ts';
 import { Blackboard } from '../../core/blackboard.ts';
 import { RiskManagerAgent } from '../../agents/risk/risk-manager-agent.ts';
 import { RiskManagerAnalystOutput } from '../../agents/risk/types.ts';
@@ -81,12 +81,17 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
    * En entorno TEST no puede hacer bypass del RiskManager: debe invocar la validación real del RiskManagerAgent.
    */
   fastify.post('/test-order', { preHandler: adminAuthHook }, async (request, reply) => {
-    // 1. Bloqueo estricto en producción
+    // 1. Bloqueo estricto en modo REAL de producción (para prevenir despachos manuales accidentales con dinero real)
+    const activeExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken') || 'bitget';
+    const isReal = activeExchange === 'kraken'
+      ? process.env.KRAKEN_MODO_REAL === 'true'
+      : process.env.BITGET_MODO_REAL === 'true';
+
     if (process.env.NODE_ENV === 'production') {
       return reply.status(403).send({
         exitoso: false,
         error: 'FORBIDDEN_IN_PRODUCTION',
-        message: 'El endpoint /test-order está estrictamente desactivado en entornos de producción.'
+        message: 'El endpoint /test-order está estrictamente desactivado en entorno de producción.'
       });
     }
 
@@ -166,7 +171,7 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
     try {
       const body = (request.body as any) || {};
       const symbol = body.symbol || 'BTC/USDT';
-      const broker = new BitgetBroker();
+      const broker = BrokerFactory.getDefaultBroker();
       const result = await broker.closePosition(symbol);
 
       return reply.status(result.exitoso ? 200 : 400).send({
@@ -199,8 +204,10 @@ export const engineRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
       const startTime = endTime - (days * 24 * 60 * 60 * 1000);
 
       const backtester = new BacktestEngine();
+      const timeframe = body.timeframe || '15m';
       const result = await backtester.runBacktest({
         symbol,
+        timeframe,
         start_time: startTime,
         end_time: endTime,
         initial_balance: initialBalance,

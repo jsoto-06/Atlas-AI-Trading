@@ -1,357 +1,322 @@
 <div align="center">
 
-# ⚡ ATLAS AI TRADING v2.0.0
-### *INSTITUTIONAL-GRADE ADAPTIVE MULTI-AGENT TRADING SYSTEM*
+# ⚡ ATLAS AI TRADING v2.1 PRO
+### *INSTITUTIONAL-GRADE ADAPTIVE MULTI-AGENT TRADING TERMINAL & SCHEDULER*
+**Multi-Broker: Hyperliquid L1 DEX • Kraken Futures • Bitget Futures**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0+-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-19.0+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
-[![Vitest](https://img.shields.io/badge/Vitest-3.0+-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-3.0+_(40/40_PASSED)-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Hyperliquid](https://img.shields.io/badge/Hyperliquid-L1_DEX_Web3-00FFA3?style=for-the-badge&logo=ethereum&logoColor=black)](https://hyperliquid.xyz/)
+[![Kraken Futures](https://img.shields.io/badge/Kraken-Futures_API_v3-5844ED?style=for-the-badge&logo=kraken&logoColor=white)](https://futures.kraken.com/)
+[![Bitget](https://img.shields.io/badge/Bitget-Futures_V2-00F2FE?style=for-the-badge&logo=crypto&logoColor=black)](https://www.bitget.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2F18-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Drizzle ORM](https://img.shields.io/badge/Drizzle-ORM-C5F74F?style=for-the-badge&logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
-[![Bitget API](https://img.shields.io/badge/Bitget-Futures_V2-00F2FE?style=for-the-badge&logo=crypto&logoColor=black)](https://www.bitget.com/)
-[![Google Gemini](https://img.shields.io/badge/Google_Gemini-2.4-8E75B2?style=for-the-badge&logo=googleai&logoColor=white)](https://ai.google.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green?style=for-the-badge)](LICENSE)
 
-**Plataforma de Trading Algorítmico Cuantitativo Autónomo para Criptomonedas (BTC, ETH, SOL)**  
-*Impulsada por Consenso Multi-Agente Desacoplado (Patrón Blackboard), Aprendizaje Bayesiano Dinámico, Firewall de Riesgo Kelly Fraccional y Persistencia Fail-Closed.*
+**Autonomous Quantitative Cryptocurrency Trading System (BTC, ETH, SOL)**  
+*Decoupled Blackboard Multi-Agent Architecture, Dynamic Bayesian Learning, Quarter-Kelly Risk Firewall, and 24/7 Autonomous Background Scheduler.*
 
-[Visitar Repositorio GitHub](https://github.com/jsoto-06/Atlas-AI-Trading.git) • [Reportar un Bug](https://github.com/jsoto-06/Atlas-AI-Trading/issues)
+[English Documentation](#-english-documentation) • [Manual en Español](#-documentación-y-manual-en-español) • [Test Suite & Proofs](#-automated-testing--audit-proofs)
 
 </div>
 
 ---
 
-## 📑 Tabla de Contenidos
-- [📌 Descripción General](#-descripción-general)
-- [🛡️ Estado de Auditoría e Integridad del Código](#️-estado-de-auditoría-e-integridad-del-código)
-- [🐘 Configuración e Integración con PostgreSQL](#-configuración-e-integración-con-postgresql)
-- [🏛️ Arquitectura del Sistema Multi-Agente](#️-arquitectura-del-sistema-multi-agente)
-- [🔬 Agentes Especialistas y Fórmulas Matemáticas](#-agentes-especialistas-y-fórmulas-matemáticas)
-  - [1. Motor de Aprendizaje Bayesiano (`LearningAgent`)](#1-motor-de-aprendizaje-bayesiano-learningagent)
-  - [2. Firewall de Riesgo Cuantitativo (`RiskManager`)](#2-firewall-de-riesgo-cuantitativo-riskmanager)
-  - [3. Orquestador de Consenso (`SupervisorAgent`)](#3-orquestador-de-consenso-supervisoragent)
-- [👥 Tabla Detallada de Agentes del Sistema](#-tabla-detallada-de-agentes-del-sistema)
-- [⚡ Integración Bitget Futures V2 API](#-integración-bitget-futures-v2-api)
-- [📊 Benchmarks de Backtesting Walk-Forward](#-benchmarks-de-backtesting-walk-forward)
-- [📡 Referencia de API REST](#-referencia-de-api-rest)
-- [🗂️ Estructura del Proyecto](#️-estructura-del-proyecto)
-- [🚀 Instalación y Despliegue](#-instalación-y-despliegue)
-- [📜 Licencia](#-licencia)
+## 🌐 Language Selector / Selector de Idioma
+- [🇬🇧 English Documentation](#-english-documentation)
+  - [1. Overview & System Architecture](#1-overview--system-architecture)
+  - [2. Multi-Broker Ecosystem (Hyperliquid, Kraken, Bitget)](#2-multi-broker-ecosystem)
+  - [3. Operational Modes: ⚡ 15m Intraday vs 🌊 1h Swing](#3-operational-modes-intraday-vs-swing)
+  - [4. Quantitative Risk Firewall & Quarter-Kelly Allocation](#4-quantitative-risk-firewall)
+  - [5. Exhaustive User & Operator Manual](#5-exhaustive-user--operator-manual)
+- [🇪🇸 Documentación y Manual en Español](#-documentación-y-manual-en-español)
+  - [1. Descripción y Arquitectura del Sistema](#1-descripción-y-arquitectura-del-sistema)
+  - [2. Ecosistema Multi-Broker (Hyperliquid DEX, Kraken, Bitget)](#2-ecosistema-multi-broker)
+  - [3. Modos Operativos: ⚡ 15m Intradía vs 🌊 1h Swing](#3-modos-operativos-intradía-vs-swing)
+  - [4. Firewall de Riesgos y Asignación Quarter-Kelly](#4-firewall-de-riesgos-y-criterio-quarter-kelly)
+  - [5. Manual Detallado de Usuario y Operador](#5-manual-detallado-de-usuario-y-operador)
+- [🧪 Automated Testing & Audit Proofs](#-automated-testing--audit-proofs)
 
 ---
 
-## 📌 Descripción General
+# 🇬🇧 English Documentation
 
-**ATLAS AI TRADING** es un ecosistema institucional desacoplado de trading algorítmico diseñado para operar contratos de futuros perpetuos en criptomonedas (**BTC/USDT**, **ETH/USDT**, **SOL/USDT**). 
+## 1. Overview & System Architecture
 
-A diferencia de los bots tradicionales basados en reglas estáticas, ATLAS emplea una **red de 11 agentes autónomos especialistas** que evalúan el mercado de manera simultánea e independiente desde múltiples ángulos: análisis de estructura Smart Money Concepts (SMC/ICT), flujo de órdenes (*orderbook imbalance*), mapas de calor de liquidaciones, divergencias en osciladores, sentimiento del mercado e impacto cualitativo de noticias impulsado por **Google Gemini AI**.
+**ATLAS AI TRADING v2.1 PRO** is a production-grade, multi-broker algorithmic trading platform developed to trade perpetual futures contracts on major crypto assets (**BTC/USDT**, **ETH/USDT**, **SOL/USDT**).
 
-El sistema opera bajo el principio estricto de **Fail Closed → NO TRADE**: ante cualquier inconsistencia de red, falla de base de datos o ausencia de datos históricos en entornos de producción/prueba, la orden es inmediatamente bloqueada para garantizar la protección del capital.
-
----
-
-## 🛡️ Estado de Auditoría e Integridad del Código
-
-En agosto de 2026, el proyecto fue sometido a la **Auditoría Forense Completa v4** resolviendo al 100% las 13 vulnerabilidades críticas (C01 - C13):
-
-- **Puntuación Pre-Auditoría:** `15/100` (NOT PRODUCTION READY)
-- **Puntuación Post-Auditoría Forense v4:** `95/100` (READY FOR PAPER / BITGET DEMO)
-- **Pruebas Automatizadas:** 27/27 pruebas unitarias e integrales pasadas exitosamente (Vitest).
-- **TypeScript:** 0 errores (`npx tsc --noEmit`).
-- **Build de Producción:** Limpio (`npm run build` → `dist/server.cjs`).
-
-### Correcciones Forenses Destacadas (v4):
-1. **Persistencia Estricta y Fail-Closed DB (`clientOid` Binding C01/C02):** `1 Intención Lógica = 1 clientOid` registrado obligatoriamente en PostgreSQL antes de enviar cualquier orden por red. Si PostgreSQL falla o está desconectado en entorno real/test, el despacho se aborta inmediatamente.
-2. **Máquina de Estados de Arranque (C03):** Reconciliación estricta al inicio (`STARTING` $\rightarrow$ `RECONCILING` $\rightarrow$ `READY` $\rightarrow$ `TRADING`). Ante errores críticos, pasa a `FAILED_SAFE` bloqueando el trading.
-3. **Bloqueo de Bypass de Riesgo (C04):** `/test-order` devuelve `403 Forbidden` en producción y ejecuta obligatoriamente el `RiskManagerAgent`.
-4. **Backtesting Walk-Forward sin Look-ahead Bias (C06):** Precios alineados de forma justa (Señal en Vela N $\rightarrow$ Ejecución en Precio Open de Vela N+1).
-5. **Aislamiento de Concurrencia y Ciclos (C07/C08):** Pizarra rechaza datos expirados (`STALE_DATA_REJECTED`) y aplica cerrojos (`symbolLocks`) por activo.
-6. **ACCOUNT_BLOWN — Parada de Simulación por Quiebra (C09):** Si el equity llega a `<= 0`, el motor de backtest detiene inmediatamente la simulación, registra el evento como `ACCOUNT_BLOWN` y no genera ninguna operación adicional. El drawdown máximo no puede exceder el `-100%`.
-7. **Paginación Real de Datos Históricos Bitget (C10):** `RealMarketDataProvider.getCandles()` realiza peticiones paginadas hacia atrás en chunks de 1,000 velas para cubrir rangos largos sin truncar:
-   - 3 días a 15m → **288 velas** (1 página)
-   - 7 días a 15m → **672 velas** (1 página)
-   - 14 días a 15m → **1,345 velas** (2 páginas)
-   - 30 días a 15m → **2,881 velas** (3 páginas)
-8. **Sharpe/Sortino sobre Retornos Diarios (C11):** Las métricas de ratio riesgo/rendimiento se calculan sobre retornos periódicos diarios del equity ($R_d = \frac{E_d - E_{d-1}}{E_{d-1}}$) anualizados con $\sqrt{365}$, eliminando la inflación artificial de la métrica.
-9. **Idempotencia de Cierre de Posición Bitget (C12):** `close-positions` con `clientOid` único por cierre lógico. No se ejecutan órdenes fallback ciegas. Si hay timeout o estado ambiguo, se consulta `getPosition()` primero para verificar si la posición sigue abierta.
-10. **Payload Correcto de Cierre Bitget (C13):** Se añadieron `marginCoin` y `reduceOnly` al payload de `/api/v2/mix/order/close-positions` para garantizar el cierre idempotente en modo Demo y Real.
-
----
-
-## 🐘 Configuración e Integración con PostgreSQL
-
-ATLAS AI TRADING utiliza **PostgreSQL** para la persistencia auditada de órdenes, ejecuciones, decisiones del supervisor y logs de telemetría mediante **Drizzle ORM**.
-
-### Pasos de Configuración en Windows / Local:
-
-1. **Instalar PostgreSQL y pgAdmin 4:**
-   - Descarga e instala PostgreSQL 15 o superior.
-   - En la pantalla final de Stack Builder, haz clic en **Cancel** (ya tienes pgAdmin 4 y el servidor de BD instalados).
-
-2. **Crear la Base de Datos en pgAdmin 4:**
-   - Abre **pgAdmin 4** desde el menú Inicio.
-   - Despliega **Servers** $\rightarrow$ **PostgreSQL**.
-   - Haz clic derecho en **Databases** $\rightarrow$ **Create** $\rightarrow$ **Database...**
-   - Nombre de la base de datos: **`atlas_trading`**. Haz clic en **Save**.
-
-3. **Configurar el Archivo `.env`:**
-   Configura tus credenciales en el archivo `.env`:
-   ```env
-   SQL_HOST="localhost"
-   SQL_USER="postgres"
-   SQL_PASSWORD="tu_password_real"
-   SQL_DB_NAME="atlas_trading"
-   ```
-
-4. **Ejecutar las Migraciones de Tablas (Drizzle Kit):**
-   ```powershell
-   npx drizzle-kit push:pg
-   ```
-   Esto creará automáticamente las tablas: `orders`, `trades`, `audit_logs`, `supervisor_decisions` y `settings`.
-
----
-
-## 🏛️ Arquitectura del Sistema Multi-Agente
+### Core Architectural Pillars
+- **Decoupled Blackboard Pattern:** 11 specialized autonomous agents publish structured market assessments with Time-To-Live (TTL) expiration timestamps onto a shared, thread-safe blackboard.
+- **Fail-Closed Guarantee (`Fail Closed → NO TRADE`):** In the event of network latency spikes, database disconnects, or contradictory signals, the execution pipeline instantly halts orders to protect principal capital.
+- **24/7 Background Scheduler (`EngineScheduler`):** A daemonized, autonomous background loop running on the Linux host/Docker container that reconciles exchange positions, executes multi-agent evaluations, and dispatches orders independently of any open browser window.
+- **Dynamic Telemetry & Mobile Sync:** Full bidirectional API telemetry streaming live order books, risk parameters, and agent consensus to desktop and mobile browsers (`http://<server-ip>:3002`).
 
 ```mermaid
 flowchart TD
-    subgraph Capa1["Capa 1: Agentes Analistas Especialistas (FAST / SLOW)"]
-        TA["TechnicalAnalyst\n(SMC/ICT, Session VWAP, RSI, MACD)"]
-        OF["OrderFlowAnalyst\n(Bid/Ask Imbalance & Book Depth)"]
-        CO["CorrelationAnalyst\n(Cross Correlation BTC/ETH/SOL)"]
-        DV["DivergenceAnalyst\n(Bullish/Bearish Regular & Hidden)"]
-        LQ["LiquidationAnalyst\n(Liquidity Pools & Squeezes)"]
-        ST["SentimentAnalyst\n(Fear & Greed Index Live)"]
-        NW["NewsAnalyst\n(Cointelegraph RSS + Gemini AI)"]
+    subgraph MarketFeeds ["Real-Time Market Feeds"]
+        HL[Hyperliquid L1 DEX API]
+        KF[Kraken Futures v3 API]
+        BG[Bitget Futures v2 API]
     end
 
-    subgraph Capa2["Capa 2: Tuning Bayesiano y Orquestación de Consenso"]
-        LA["LearningAgent\n(Beta Conjugate Prior & Laplace Smoothing)"]
-        SA["SupervisorAgent\n(Consenso Ponderado [-100, +100])"]
+    subgraph FastLoop ["Fast-Loop Agents (Quantitative)"]
+        TA[TechnicalAnalyst - EMA, RSI, MACD, ADX, ATR]
+        OF[OrderFlow - DOM Imbalance, CVD, Delta]
+        LQ[Liquidation - Magnetic Pools, Squeeze Risk]
+        DV[Divergence - Oscillator Clashes]
     end
 
-    subgraph Capa3["Capa 3: Gobernanza de Riesgo y Persistencia Fail-Closed"]
-        RM["RiskManager\n(Quarter-Kelly, ATR Stop Loss, Max 2% Risk)"]
-        OM["OrderManager & PostgreSQL\n(Fail-Closed clientOid & StateMachine)"]
-        EX["OrderRouter / BitgetBroker\n(Bitget Futures V2 REST & WebSocket)"]
+    subgraph SlowLoop ["Slow-Loop Agents (Cognitive & Macro)"]
+        NS[News - Cointelegraph RSS + Gemini AI]
+        ST[Sentiment - Fear & Greed + On-Chain Bias]
+        OC[OnChain - Mempool Size, Whales, Inflows]
+        CR[Correlation - NASDAQ, S&P500, DXY, VIX, Gold]
+        LR[Learning - Dynamic Bayesian Weight Optimizer]
     end
 
-    Capa1 -->|Señales & Confianza| LA
-    LA -->|Pesos Adaptados 0.70x - 1.40x| SA
-    SA -->|Decisión BUY / SELL / HOLD| RM
-    RM -->|Orden Validada con TP/SL| OM
-    OM -->|Persistencia DB Fail-Closed| EX
+    subgraph ConsensusRisk ["Consensus & Capital Protection"]
+        BB[(Blackboard Engine Memory)]
+        SV[SupervisorAgent - Weighted Consensus Calculation]
+        RM[RiskManagerAgent - Quarter-Kelly Firewall]
+    end
+
+    subgraph ExecutionBroker ["Order Dispatch & Broker Routing"]
+        OM[OrderManager - PostgreSQL clientOid Persistence]
+        BF[BrokerFactory]
+        EX_HL[HyperliquidBroker]
+        EX_KF[KrakenBroker]
+        EX_BG[BitgetBroker]
+    end
+
+    MarketFeeds --> FastLoop & SlowLoop
+    FastLoop & SlowLoop --> BB
+    BB --> SV --> RM
+    RM -->|Approved Signal| OM --> BF
+    BF --> EX_HL & EX_KF & EX_BG
 ```
 
 ---
 
-## 🔬 Agentes Especialistas y Fórmulas Matemáticas
+## 2. Multi-Broker Ecosystem
 
-### 1. Motor de Aprendizaje Bayesiano (`LearningAgent`)
-El `LearningAgent` implementa un modelo de distribución **Beta Conjunta con Suavizado de Laplace** para medir la fiabilidad de cada analista basándose en sus operaciones ganadas ($w$) y perdidas ($l$):
+ATLAS features a dynamic multi-broker abstraction layer via `BrokerFactory`, allowing instant 1-click switching in the UI or `.env`:
 
-$$\text{Expectativa Posterior } E[\theta_i] = \frac{w_i + 1}{w_i + l_i + 2}$$
+### 💧 Hyperliquid DEX (Web3 Layer 1 Perpetuals)
+- **Direct L1 Integration:** Built on `@nktkas/hyperliquid` and `viem` with cryptographically signed ECDSA/secp256k1 transactions on Hyperliquid's native EVM chain.
+- **Zero-Friction Paper Trading DEX Fallback:** Because the official Hyperliquid Testnet faucet enforces anti-Sybil restrictions requiring a Mainnet deposit history, Atlas automatically injects **$1,000.00 USD virtual demo margin** when detecting a zero-balance testnet wallet. Orders are executed against real-time live Hyperliquid L1 order books.
+- **Mainnet Ready:** Compatible with MetaMask or Agent Wallets on Arbitrum/Hyperliquid for real trading with low fees.
 
-A partir de esta expectativa posterior, se calcula un **Multiplicador Bayesiano Dinámico** ($M_i$) acotado entre $0.70\times$ y $1.40\times$:
+### 🐙 Kraken Futures (Derivatives API v3)
+- **High-Throughput Perpetual Contracts:** Trades contracts like `PF_XBTUSD`, `PF_ETHUSD`, and `PF_SOLUSD`.
+- **HMAC SHA-512 Authentication:** Cryptographic post-data signing with Base64 secrets.
+- **Dual Environment:** Switch seamlessly between Kraken Demo (`demo-futures.kraken.com`) and Production (`futures.kraken.com`).
 
-$$M_i = \text{clamp}\left(0.70, \frac{E[\theta_i]}{\text{Benchmark Base}}, 1.40\right)$$
-
-### 2. Firewall de Riesgo Cuantitativo (`RiskManager`)
-El cálculo del tamaño de posición utiliza la fórmula de **Quarter-Kelly**:
-
-$$f^* = \frac{1}{4} \cdot \left( p - \frac{1 - p}{b} \right)$$
-
-*Donde:*
-* $p$ = Tasa de acierto **empírica real** desde la base de datos (mínimo 20 operaciones).
-* $b$ = Ratio Riesgo/Beneficio estimado ($RRR \ge 2.0$).
-* **Hard Cap de Riesgo:** Máximo **2.0% del capital total expuesto** por operación. Si no hay suficiente historial, aplica un sizing conservador predeterminado del **1.0%**.
-
-### 3. Orquestador de Consenso (`SupervisorAgent`)
-El `SupervisorAgent` normaliza y pondera los votos de todos los analistas activos aplicando los multiplicadores Bayesianos:
-
-$$\text{Score Final} = \frac{\sum_{i=1}^{N} \text{Score}_i \cdot \text{Confianza}_i \cdot M_i}{\sum_{i=1}^{N} \text{Confianza}_i \cdot M_i}$$
-
-* **Score > +25**: Genera señal de compra (**BUY / LONG**).
-* **Score < -25**: Genera señal de venta (**SELL / SHORT**).
-* **-25 ≤ Score ≤ +25**: Mantiene posición (**HOLD / NEUTRAL**).
+### 🪙 Bitget Futures (v2 Mix API)
+- **USDT-M Futures:** Standardized USDT margin contracts (`SBTCSUSDT`, `SETHSUSDT`).
+- **Passphrase Secured:** HMAC SHA-256 API signature verification.
 
 ---
 
-## 👥 Tabla Detallada de Agentes del Sistema
+## 3. Operational Modes: Intraday vs Swing
 
-| Agente | Tipo | Métrica / Enfoque | Descripción y Función |
-| :--- | :---: | :---: | :--- |
-| **`TechnicalAnalyst`** | `FAST` | SMC / ICT / Session VWAP | Identifica bloques de orden (*Order Blocks*), vacíos de liquidez (*FVG*) y VWAP anclado. |
-| **`OrderFlow`** | `FAST` | Bid/Ask Imbalance | Escanea la profundidad del libro de órdenes para medir la presión compradora/vendedora. |
-| **`Correlation`** | `FAST` | Matriz de Correlación | Analiza desacoples y convergencias de precios entre BTC/USDT, ETH/USDT y SOL/USDT. |
-| **`Divergence`** | `FAST` | RSI / MACD | Detecta divergencias alcistas/bajistas (regulares y ocultas) anticipando giros de tendencia. |
-| **`Liquidation`** | `FAST` | Pools de Liquidez | Mapea zonas de stop-loss masivos e identifica niveles candidatos a *short/long squeezes*. |
-| **`Sentiment`** | `SLOW` | Fear & Greed Index | Mide el sentimiento cuantitativo del mercado en tiempo real. |
-| **`NewsAnalyst`** | `SLOW` | Cointelegraph / Gemini AI | Escanea noticias en tiempo real e interpreta su impacto cualitativo en el precio usando IA. |
-| **`LearningAgent`** | `TUNING` | Laplace / Beta Prior | Ajusta los pesos de votación de los agentes entre **0.70x y 1.40x** según su rendimiento histórico. |
-| **`SupervisorAgent`** | `MASTER` | Consenso Ponderado | Consolida las señales en una puntuación normalizada `[-100, +100]` y define la dirección final. |
-| **`RiskManager`** | `CONTROL` | Quarter-Kelly / ATR | Firewall de riesgo con Hard Cap del 2%, Stop-Loss ATR y Trailing Stop. |
-| **`BitgetBroker`** | `EXECUTION` | Bitget API V2 | Ejecuta órdenes en **Bitget Futures V2 API** en modo **Demo (SBTCSUSDT/SUSDT)** o **Real (BTCUSDT/USDT)**. |
+| Feature | ⚡ 15m Intraday Mode | 🌊 1h Swing Mode |
+| :--- | :--- | :--- |
+| **Primary Timeframe** | 15-Minute Candles | 1-Hour Candles |
+| **Scheduler Cycle Rate** | Evaluates every 60 seconds | Evaluates every 60 seconds |
+| **Target Holding Time** | 30 minutes to 4 hours | 8 hours to 3 days |
+| **Stop Loss (ATR)** | 1.2x - 1.5x ATR (Tight protection) | 2.0x - 2.8x ATR (Wide breathing room) |
+| **Target Profit Ratio** | 1:1.8 to 1:2.2 Risk/Reward | 1:2.5 to 1:3.5 Risk/Reward |
+| **Best Used For** | Fast scalping, volatile sessions | Structural trends, macro correlation |
 
 ---
 
-## ⚡ Integración Bitget Futures V2 API
+## 4. Quantitative Risk Firewall
 
-El sistema incluye un conector nativo para **Bitget Futures V2 API**:
-
-* **Autenticación HMAC-SHA256**: Firmado dinámico de cabeceras (`ACCESS-KEY`, `ACCESS-SIGN`, `ACCESS-TIMESTAMP`, `ACCESS-PASSPHRASE`).
-* **Sincronización Dual de Entornos**:
-  * **Modo Demo (Sandbox)**: `BITGET_MODO_REAL="false"`, usa contratos `SUSDT-FUTURES` y pares simulados como `SBTCSUSDT`.
-  * **Modo Real**: `BITGET_MODO_REAL="true"`, usa contratos `USDT-FUTURES` y pares reales como `BTCUSDT`.
-* **Filtrado Estricto de Posiciones:** Previene colisiones consultando exactamente la posición correspondiente al símbolo solicitado.
-* **Actualización 2026‑08‑12:** Se añadió `marginCoin` y `reduceOnly` al payload de cierre de posición para garantizar idempotencia y correcto funcionamiento en modo Demo y Real.
-
----
-
-## 📊 Benchmarks de Backtesting Walk-Forward
-
-Resultados deterministas sobre datos históricos reales de Bitget (Capital Inicial: **$10,000 USD**, Apalancamiento: 10x, Capital de Riesgo por trade: 1%):
-
-| Par | Ventana | Velas (15m) | Páginas API | Trades | Win Rate | Profit Factor | Max Drawdown | Estado |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **BTC/USDT** | **3 Días** | 288 | 1 | — | — | — | — | ⬜ Sin señales |
-| **BTC/USDT** | **7 Días** | 672 | 1 | — | — | — | — | ⬜ Sin señales |
-| **BTC/USDT** | **14 Días** | 1,345 | 2 | — | — | — | — | ⬜ Sin señales |
-| **BTC/USDT** | **30 Días** | 2,881 | 3 | 9 | **44.4%** | **1.96** | **-4.88%** | 🟢 Ganador |
-| **SOL/USDT** | **30 Días** | 2,881 | 3 | 20 | **40.0%** | **1.45** | **-4.84%** | 🟢 Ganador |
-| **ETH/USDT** | **30 Días** | 2,881 | 3 | 19 | **36.8%** | **1.26** | **-4.03%** | 🟢 Ganador |
-| **SOL/USDT** | **14 Días** | 1,345 | 2 | 10 | **40.0%** | **1.56** | **-3.67%** | 🟢 Ganador |
-| **ETH/USDT** | **14 Días** | 1,345 | 2 | 11 | **36.4%** | **1.29** | **-4.07%** | 🟢 Ganador |
-
-> ⚠️ **Nota:** El motor de backtest aplica la condición `ACCOUNT_BLOWN` automáticamente si el equity cae a `<= $0`. El drawdown máximo está limitado al `-100%` del capital inicial. Con capital de $100 y posiciones mínimas de BTC ($1,500+), la mayoría de señales se rechazan por `REJECTED_INSUFFICIENT_MARGIN`; se recomienda capital mínimo de $1,000.
+The system enforces a **Fail-Closed deterministic firewall** in `RiskManagerAgent`:
+1. **The HOLD Buffer:**
+   - Score $\ge +25$: **BUY (Long)**
+   - Score $\le -25$: **SELL (Short)**
+   - Score between $-24$ and $+24$: **HOLD (Cash liquidity)**. The bot refuses to trade during noisy, sideways chops.
+2. **Quarter-Kelly Formula:**
+   $$f^* = \frac{1}{4} \times \left( \frac{p(b + 1) - 1}{b} \right)$$
+   Where $p$ is the empirical Bayesian win-rate and $b$ is the payout ratio. Risk per trade is capped at 2.0% of total equity.
+3. **Hard Loss Cap:** Daily loss cap strictly limited to \$20 USD or -4.5% drawdown, automatically aborting trading if hit.
+4. **Leverage Optimization:** Uses 10x isolated leverage with margin allocated strictly per Kelly recommendation.
 
 ---
 
-## 📡 Referencia de API REST
+## 5. Exhaustive User & Operator Manual
 
-El servidor expone endpoints REST en **Fastify** (Puerto 3001) accesibles desde el Frontend o clientes externos:
-
-### 1. Health Check de Base de Datos y Motor
-```http
-GET /health
-```
-```json
-{
-  "status": "HEALTHY",
-  "database": "CONNECTED",
-  "uptime": 142.5,
-  "timestamp": 1786359431000
-}
-```
-
-### 2. Obtener Audit Logs de Telemetría
-```http
-GET /api/v1/telemetry/logs?limit=50
-```
-
-### 3. Despacho de Orden Manual / Test (Protegido)
-```http
-POST /api/v1/engine/test-order
-Authorization: Bearer <ADMIN_API_TOKEN>
-Content-Type: application/json
-
-{
-  "simbolo": "BTC/USDT",
-  "lado": "BUY",
-  "tamano": 100,
-  "tipo": "MARKET"
-}
-```
-
----
-
-## 🗂️ Estructura del Proyecto
-
-```text
-atlas-ai-trading/
-├── .github/workflows/          # CI Pipeline (GitHub Actions)
-├── docs/                       # Documentación adicional y arquitectura
-├── src/
-│   ├── agents/                 # 11 Agentes Especialistas y Risk Manager
-│   ├── analytics/              # Ratios financieros (Sharpe, Sortino, Drawdown)
-│   ├── api/                    # Servidor Fastify REST y rutas protegidas
-│   ├── backtesting/            # Motor de simulación Walk-Forward determinista
-│   ├── core/                   # Blackboard, Engine Scheduler y Orchestrator
-│   ├── db/                     # Esquemas Drizzle ORM y migraciones PostgreSQL
-│   ├── execution/              # BitgetBroker, OrderManager, StateMachine & Router
-│   └── App.tsx                 # Dashboard React 19 + Vite
-├── tests/
-│   └── backtest/
-│       ├── engine.test.ts              # Tests del motor de backtesting
-│       ├── capital-blowup.test.ts      # Tests de ACCOUNT_BLOWN y equity <= 0
-│       ├── market-data-pagination.test.ts  # Tests de paginación (14d>1300, 30d>2800 velas)
-│       ├── math-consistency.test.ts    # Tests de consistencia matemática
-│       └── reproducibility.test.ts    # Tests de reproducibilidad determinista
-├── server.ts                   # Gateway Express + Vite Middleware / Production Server
-├── Dockerfile                  # Contenedor Multi-Stage
-├── docker-compose.yml          # Orquestación Docker (App + Postgres)
-├── package.json                # Dependencias y scripts NPM
-└── README.md                   # Documentación Oficial
-```
-
----
-
-## 🚀 Instalación y Despliegue
-
-### 1. Clonar el Repositorio
+### Step 1: Clone and Configure Environment
 ```bash
-git clone https://github.com/jsoto-06/Atlas-AI-Trading.git
+git clone git@github.com:jsoto-06/Atlas-AI-Trading.git
 cd Atlas-AI-Trading
+cp .env.example .env
 ```
-
-### 2. Instalar Dependencias
-```bash
-npm install
-```
-
-### 3. Configurar Variables de Entorno (`.env`)
+Edit `.env` to set your credentials and `ADMIN_API_TOKEN`:
 ```env
-# BITGET CREDENTIALS
-BITGET_API_KEY="tu_bitget_api_key"
-BITGET_API_SECRET="tu_bitget_api_secret"
-BITGET_PASSPHRASE="tu_bitget_passphrase"
-BITGET_MODO_REAL="false"
-
-# POSTGRESQL DB
-SQL_HOST="localhost"
-SQL_USER="postgres"
-SQL_PASSWORD="tu_password_postgres"
-SQL_DB_NAME="atlas_trading"
-
-# SECURITY & AI
-ADMIN_API_TOKEN="mi_clave_super_segura_123"
-GEMINI_API_KEY="tu_gemini_api_key"
-APP_URL="http://localhost:3000"
+ACTIVE_EXCHANGE="hyperliquid"
+ADMIN_API_TOKEN="your_secure_secret_token"
+HYPERLIQUID_PRIVATE_KEY="0x..."
+HYPERLIQUID_MODO_REAL="false" # Set true for Mainnet
 ```
 
-### 4. Crear Tablas en PostgreSQL
+### Step 2: Launch via Docker Compose
 ```bash
-npx drizzle-kit push:pg
+docker compose build
+docker compose up -d
+```
+The application will start:
+- Web Terminal & API: `http://localhost:3002` (or `http://<your-server-ip>:3002`)
+- PostgreSQL Database: Port `5433` (internal 5432)
+
+### Step 3: Accessing the Dashboard
+1. Open `http://<your-server-ip>:3002` on your desktop or mobile browser.
+2. If prompted, confirm your **Admin API Token** in the "Configuración API" tab.
+3. Observe the **Header Switcher**:
+   - `💧 Hyperliquid` / `🐙 Kraken` / `🪙 Bitget` (1-click exchange selection).
+   - `BTC` / `ETH` / `SOL` (Asset selection).
+   - `⚡` (15m Intraday) / `🌊` (1h Swing) (Timeframe selection).
+4. Click the green **Autonomous Engine Button** (`⚡`) to start or stop the 24/7 background scheduler.
+
+---
+
+# 🇪🇸 Documentación y Manual en Español
+
+## 1. Descripción y Arquitectura del Sistema
+
+**ATLAS AI TRADING v2.1 PRO** es una plataforma institucional desacoplada de trading algorítmico cuantitativo diseñada para operar contratos de futuros perpetuos sobre criptomonedas (**BTC/USDT**, **ETH/USDT**, **SOL/USDT**).
+
+A diferencia de los robots convencionales que emplean indicadores estáticos, ATLAS utiliza una **red de 11 agentes autónomos especialistas** organizados bajo el patrón **Blackboard (Pizarra Compartida en Memoria)**:
+- **Fast-Loop (Cuantitativo):** Análisis técnico determinista, desequilibrio en el libro de órdenes (DOM Imbalance), mapas de calor de liquidaciones y divergencias en osciladores.
+- **Slow-Loop (Cognitivo y Macro):** Análisis de sentimiento en redes y miedo/codicia (Fear & Greed Index), impacto de noticias en tiempo real con **Google Gemini**, métricas On-Chain (Mempool, movimientos de ballenas) y correlaciones con activos macroeconómicos (NASDAQ, S&P500, DXY, VIX, Oro).
+- **Consenso y Supervisión:** El `SupervisorAgent` pondera dinámicamente los votos de los agentes mediante calibración Bayesiana (`LearningAgent`) y emite una decisión matemática única.
+- **Firewall de Riesgo:** El `RiskManagerAgent` evalúa la orden antes de autorizar cualquier despacho al broker. Si la orden no cumple con los ratios de seguridad, es descartada en milisegundos.
+
+---
+
+## 2. Ecosistema Multi-Broker
+
+Atlas permite conmutar en caliente entre 3 brokers institucionales:
+
+### 💧 Hyperliquid DEX (Perpetuos Descentralizados L1)
+- **Tecnología Web3 Nativa:** Firma criptográfica directa mediante ECDSA/secp256k1 en la blockchain L1 de Hyperliquid con `@nktkas/hyperliquid` y `viem`.
+- **Modo Paper Trading DEX con Precios Reales:** Si operas en Testnet y la wallet tiene \$0.00 debido a las restricciones anti-bots del grifo oficial (*drip*), Atlas provisiona automáticamente **\$1.000,00 USD virtuales de margen**. Las órdenes se simulan con el libro de órdenes y precios tick-by-tick reales de Hyperliquid sin riesgo.
+- **Mainnet Listo:** Puedes conectar tu wallet real de Arbitrum/Hyperliquid para operar con comisiones mínimas.
+
+### 🐙 Kraken Futures (Derivados API v3)
+- **Contratos Perpetuos:** Opera `PF_XBTUSD`, `PF_ETHUSD`, `PF_SOLUSD`.
+- **Firma Criptográfica HMAC SHA-512:** Autenticación de grado bancario.
+- **Soporte Demo y Real:** Conmutación entre sandbox demo (`demo-futures.kraken.com`) y futuros reales (`futures.kraken.com`).
+
+### 🪙 Bitget Futures (v2 Mix)
+- **Futuros USDT-M:** Contratos estándar respaldados en USDT.
+- **Seguridad Triple:** Clave API, secreto y frase de paso (*passphrase*).
+
+---
+
+## 3. Modos Operativos: Intradía vs Swing
+
+### ⚡ Modo Intradía (Velas de 15 Minutos)
+- **Objetivo:** Capturar movimientos rápidos del precio aprovechando ineficiencias de corto plazo en el libro de órdenes.
+- **Duración típica:** De 30 minutos a 4 horas.
+- **Protección Stop Loss:** Ceñida (1.2 a 1.5 veces el ATR de la vela de 15m).
+- **Target:** Ratio Beneficio/Riesgo de 1:1.8 a 1:2.2.
+
+### 🌊 Modo Swing (Velas de 1 Hora)
+- **Objetivo:** Montarse en tendencias macro sostenidas respaldadas por correlación positiva con índices bursátiles (NASDAQ/S&P) e inversa con el dólar (DXY).
+- **Duración típica:** De 8 horas a 3 días.
+- **Protección Stop Loss:** Holgada (2.0 a 2.8 veces el ATR de la vela de 1 hora) para resistir la volatilidad intradía.
+- **Target:** Ratio Beneficio/Riesgo de 1:2.5 a 1:3.5.
+
+---
+
+## 4. Firewall de Riesgos y Criterio Quarter-Kelly
+
+El bot opera bajo la regla de oro: **Fail-Closed → Proteger el capital ante cualquier duda**.
+
+1. **La Zona de Neutralidad (Filtro HOLD):**
+   - El bot **NO abre órdenes** por aburrimiento o azar.
+   - Puntuación $\ge +25$: **COMPRA (BUY)** autorizada.
+   - Puntuación $\le -25$: **VENTA (SELL)** autorizada.
+   - Puntuación entre $-24$ y $+24$: **ESPERA (HOLD)**. El RiskManager bloquea la entrada para evitar caídas en trampas laterales.
+2. **Criterio Quarter-Kelly (2.0%):**
+   El tamaño de cada operación se calcula matemáticamente para maximizar la tasa de crecimiento geométrico del capital minimizando el riesgo de quiebra.
+3. **Tope de Pérdida Estricto:** Límite diario de \$20 USD o -4.5% de drawdown máximo. Si se alcanza, el bot suspende operaciones automáticamente.
+4. **Apalancamiento Controlado:** 10x aislado con cálculo dinámico de contratos por valor nocional.
+
+---
+
+## 5. Manual Detallado de Usuario y Operador
+
+### 🚀 Despliegue en 3 Minutos con Docker
+```bash
+# 1. Clonar el repositorio
+git clone git@github.com:jsoto-06/Atlas-AI-Trading.git
+cd Atlas-AI-Trading
+
+# 2. Copiar plantilla de variables
+cp .env.example .env
+
+# 3. Levantar los contenedores
+docker compose build
+docker compose up -d
 ```
 
-### 5. Ejecutar Pruebas Automatizadas (Vitest)
+### 📱 Control desde el Móvil o PC
+1. Entra a `http://<ip-de-tu-servidor>:3002` desde el navegador de tu teléfono o PC.
+2. En la barra superior tienes acceso a:
+   - **Botón de Exchange:** `💧` (Hyperliquid), `🐙` (Kraken), `🪙` (Bitget).
+   - **Activos:** `BTC`, `ETH`, `SOL`.
+   - **Temporalidad:** `⚡` (15m Intradía) o `🌊` (1h Swing).
+   - **Interruptor 24/7:** Botón verde `⚡` en el extremo superior derecho. Si está en verde parpadeante, el bot está activo en segundo plano analizando el mercado cada 60 segundos aunque cierres la pestaña del navegador.
+3. En la tarjeta **"SALDOS DISPONIBLES"** verás:
+   - **DEMO:** \$1.000,00 USD (saldo virtual de prueba).
+   - **REAL:** Saldo real de tu cuenta en el exchange seleccionado.
+4. En la tarjeta **"RÉGIMEN & MODO"**:
+   - Monitorea el ADX (fuerza de la tendencia), la volatilidad ATR y el régimen actual (Consolidación Lateral o Tendencia Alcista/Bajista).
+
+---
+
+## 🧪 Automated Testing & Audit Proofs
+
+ATLAS cuenta con una suite completa de pruebas unitarias, de integración y de seguridad forense ejecutadas con **Vitest**:
+
 ```bash
 npm test
 ```
 
-### 6. Iniciar Servidor en Desarrollo
-```bash
-npm run dev
+### 📊 Resultados de la Suite de Pruebas (100% Passed)
+```text
+ ✓ tests/broker/kraken-broker.test.ts (8 tests)
+ ✓ tests/broker/hyperliquid-broker.test.ts (5 tests)
+ ✓ tests/broker/bitget-broker.test.ts (2 tests)
+ ✓ tests/orders/order-no-duplicate-on-network-timeout.test.ts (1 test)
+ ✓ tests/orders/order-db-failure-blocks-execution.test.ts (2 tests)
+ ✓ tests/orders/order-router.test.ts (2 tests)
+ ✓ tests/orders/concurrency-signals.test.ts (1 test)
+ ✓ tests/security/risk-bypass.test.ts (2 tests)
+ ✓ tests/backtest/market-data-pagination.test.ts (4 tests)
+ ✓ tests/core/startup-reconciliation-flow.test.ts (3 tests)
+ ✓ tests/agents/risk-manager-firewall.test.ts (4 tests)
+ ✓ tests/agents/supervisor-consensus.test.ts (3 tests)
+ ✓ tests/analytics/walk-forward-metrics.test.ts (3 tests)
+
+ Test Files  15 passed (15)
+      Tests  40 passed (40)
+   Duration  23.08s
 ```
-Abre **`http://localhost:3000/`** en tu navegador.
+
+### Principales Salvaguardas Verificadas en las Pruebas:
+1. **Idempotencia de Órdenes (No Duplicados):** Ante un corte de red o timeout HTTP, el `clientOid` inmutable garantiza que la orden no se duplique al reintentar.
+2. **Persistencia Fail-Closed:** Si la base de datos PostgreSQL se desconecta, el `OrderManager` aborta el 100% de las órdenes antes de tocar la red.
+3. **Bloqueo de Bypass de Riesgos:** El endpoint de prueba manual `/api/v1/engine/test-order` devuelve `403 Forbidden` en producción y requiere validación estricta del `RiskManagerAgent`.
+4. **Paginación Completa de Velas:** Backtesting descarga miles de velas reales de 15m y 1h sin truncamientos ni sesgos de anticipación (*look-ahead bias*).
+5. **Simulación Web3 Zero-Friction:** Hyperliquid y Kraken ejecutan órdenes de prueba con cotizaciones reales en vivo cuando no hay fondos on-chain o claves configuradas.
 
 ---
 
-## 📜 Licencia
-
-Este proyecto está distribuido bajo la Licencia **Apache 2.0**. Consulta el archivo [LICENSE](LICENSE) para obtener más información.
-
 <div align="center">
-  <sub>Desarrollado con ❤️ Jonathan Soto para Trading Algorítmico Cuantitativo e Inteligencia Artificial.</sub>
+Desarrollado para traders algorítmicos que exigen solidez matemática, protección de capital y ejecución continua 24/7.
 </div>

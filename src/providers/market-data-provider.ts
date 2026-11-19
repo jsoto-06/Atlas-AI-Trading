@@ -25,8 +25,14 @@ export interface IMarketDataProvider {
 
 export class RealMarketDataProvider implements IMarketDataProvider {
   public async getCandles(symbol: string, timeframe: string, startTime: number, endTime: number): Promise<CandleData[]> {
-    const mappedSymbol = mapSymbol(symbol);
-    const productType = getProductType();
+    const clean = symbol.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    let candleSymbol = clean;
+    if (clean.includes('BTC') || clean.includes('XBT')) candleSymbol = 'BTCUSDT';
+    else if (clean.includes('ETH')) candleSymbol = 'ETHUSDT';
+    else if (clean.includes('SOL')) candleSymbol = 'SOLUSDT';
+    else if (!candleSymbol.endsWith('USDT') && !candleSymbol.endsWith('USDC')) candleSymbol = `${candleSymbol}USDT`;
+    
+    const productType = 'USDT-FUTURES';
     const granularity = mapTimeframeToGranularity(timeframe);
 
     const durationMs = endTime - startTime;
@@ -44,7 +50,7 @@ export class RealMarketDataProvider implements IMarketDataProvider {
     while (currentEnd > startTime && page < 20) {
       page++;
       const chunkStart = Math.max(startTime, currentEnd - (1000 * granularityMs));
-      const url = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${mappedSymbol}&productType=${productType}&granularity=${granularity}&startTime=${chunkStart}&endTime=${currentEnd}&limit=1000`;
+      const url = `https://api.bitget.com/api/v2/mix/market/candles?symbol=${candleSymbol}&productType=${productType}&granularity=${granularity}&startTime=${chunkStart}&endTime=${currentEnd}&limit=1000`;
 
       let res: Response;
       try {
@@ -139,6 +145,9 @@ export class RealMarketDataProvider implements IMarketDataProvider {
 
 export class HistoricalMarketDataProvider implements IMarketDataProvider {
   public async getCandles(symbol: string, timeframe: string, startTime: number, endTime: number): Promise<CandleData[]> {
+    const granularityMs = timeframe.toLowerCase() === '1h' ? 3600000 : 900000;
+    const expectedCount = Math.floor((endTime - startTime) / granularityMs);
+
     try {
       const rows = await db
         .select()
@@ -153,7 +162,8 @@ export class HistoricalMarketDataProvider implements IMarketDataProvider {
         )
         .orderBy(asc(marketCandles.timestamp));
 
-      if (rows && rows.length >= 10) {
+      // Solo utilizar la base de datos si cubre al menos el 75% de las velas requeridas (mínimo 50)
+      if (rows && rows.length >= Math.max(50, Math.floor(expectedCount * 0.75))) {
         return rows.map(r => ({
           open: parseFloat(r.open),
           high: parseFloat(r.high),

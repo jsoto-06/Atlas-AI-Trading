@@ -4,40 +4,30 @@
  */
 
 import { OrderRequest, ExecutionResult } from '../types.ts';
+import { IExchangeBroker, ExchangeId, PositionInfo, TickerInfo, OrderQueryInfo } from './types.ts';
 
 /**
  * Clase abstracta inmutable y fuertemente tipada BaseBroker.
  * 
- * Sirve como el contrato base y la columna vertebral para todos los adaptadores
- * de corretaje (brokers/exchanges como Bitget, Binance, o simuladores institucionales).
+ * Implementa el contrato IExchangeBroker y sirve como columna vertebral
+ * para los adaptadores de corretaje (Bitget, Kraken, Simulador).
  * 
- * Implementa una lógica genérica y robusta de reintentos con Backoff Exponencial
- * y Jitter (dispersión aleatoria) para mitigar fallas temporales de red, límites de tasa (rate limiting)
- * y latencia transaccional extrema.
+ * Incluye lógica institucional de reintentos con Full Jitter y Backoff Exponencial
+ * para tolerar micro-desconexiones, ráfagas de red y límites de tasa (rate limits).
  */
-export abstract class BaseBroker {
+export abstract class BaseBroker implements IExchangeBroker {
+  public abstract readonly exchangeId: ExchangeId;
   public abstract readonly nombreBroker: string;
 
-  /**
-   * Ejecuta una orden de compra o venta de forma asíncrona en el exchange.
-   * Debe ser implementado por cada broker específico (e.g., BitgetBroker, MockBroker).
-   */
+  public abstract isConfigured(): boolean;
   public abstract executeOrder(request: OrderRequest): Promise<ExecutionResult>;
-
-  /**
-   * Consulta el balance disponible en la cuenta del broker para un activo o colateral específico.
-   */
   public abstract getBalance(asset: string): Promise<number>;
-
-  /**
-   * Consulta el estado actual de una posición abierta en el exchange para un símbolo determinado.
-   */
-  public abstract getPosition(symbol: string): Promise<{ size: number; entryPrice: number; unrealizedPnl: number } | null>;
-
-  /**
-   * Cierra de forma inmediata cualquier posición abierta para un símbolo específico.
-   */
+  public abstract getPosition(symbol: string): Promise<PositionInfo | null>;
   public abstract closePosition(symbol: string): Promise<ExecutionResult>;
+  public abstract getOrderByClientOid(symbol: string, clientOid: string): Promise<OrderQueryInfo | null>;
+  public abstract setLeverage(symbol: string, leverage: number, holdSide?: 'long' | 'short'): Promise<boolean>;
+  public abstract getMarketPrice(symbol: string): Promise<number>;
+  public abstract getTicker(symbol: string): Promise<TickerInfo | null>;
 
   /**
    * Envuelve cualquier llamada asíncrona propensa a fallos de red en un bucle de reintento con
@@ -79,7 +69,7 @@ export abstract class BaseBroker {
         // Cálculo de Backoff Exponencial: retraso = base * 2^(intento - 1)
         const retrasoExponencial = retrasoBaseMs * Math.pow(2, intentoActual - 1);
         
-        // Aplicación de Jitter aleatorio (fórmula institucional de Full Jitter) para dispersar ráfagas
+        // Aplicación de Jitter aleatorio (Full Jitter) para dispersar ráfagas
         const jitter = Math.random() * retrasoExponencial;
         const retrasoFinal = Math.min(10000, retrasoExponencial + jitter); // Tope máximo de 10 segundos
 
@@ -98,7 +88,7 @@ export abstract class BaseBroker {
   /**
    * Utilidad de retraso asíncrono basada en promesas.
    */
-  private esperar(ms: number): Promise<void> {
+  protected esperar(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -4,6 +4,13 @@ import * as schema from './schema.ts'; // ESM relative import with explicit exte
 
 // Function to create a new connection pool.
 export const createPool = () => {
+  if (process.env.DATABASE_URL) {
+    return new Pool({
+      connectionString: process.env.DATABASE_URL,
+      connectionTimeoutMillis: 15000,
+    });
+  }
+
   const host = process.env.SQL_HOST;
   const user = process.env.SQL_USER;
   const password = process.env.SQL_PASSWORD;

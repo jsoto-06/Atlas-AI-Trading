@@ -350,7 +350,7 @@ Reglas críticas de negocio:
 - Todo texto explicativo, justificaciones y narrativas deben ser estrictamente en CASTELLANO.`;
 
         const response = await client.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: 'gemini-2.5-flash',
           contents: [
             {
               text: `Artículos a analizar en tiempo real:\n${JSON.stringify(articulos, null, 2)}`

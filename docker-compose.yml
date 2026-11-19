@@ -1,6 +1,23 @@
-version: '3.8'
-
 services:
+  atlas-db:
+    image: postgres:15-alpine
+    container_name: atlas_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atlas_user
+      POSTGRES_PASSWORD: atlas_db_password_2026
+      POSTGRES_DB: atlas_trading
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+      - atlas_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas_user -d atlas_trading"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   atlas-engine:
     build:
       context: .
@@ -8,16 +25,30 @@ services:
     container_name: atlas_ai_trading
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3002:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - BITGET_MODO_REAL=false
+      - SQL_HOST=atlas-db
+      - SQL_PORT=5432
+      - SQL_USER=atlas_user
+      - SQL_PASSWORD=atlas_db_password_2026
+      - SQL_DB_NAME=atlas_trading
+      - DATABASE_URL=postgresql://atlas_user:atlas_db_password_2026@atlas-db:5432/atlas_trading
     env_file:
       - .env
+    volumes:
+      - ./.env:/app/.env
+    depends_on:
+      atlas-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+
+volumes:
+  atlas_pgdata:

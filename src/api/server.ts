@@ -80,10 +80,19 @@ export class TelemetryServer {
         this.app.log.error(err, 'Fallo en el Health Check de base de datos');
       }
 
+      const currentExchange = (process.env.ACTIVE_EXCHANGE as 'bitget' | 'kraken' | 'hyperliquid') || 'kraken';
+      const isReal = currentExchange === 'hyperliquid'
+        ? process.env.HYPERLIQUID_MODO_REAL === 'true'
+        : currentExchange === 'kraken'
+          ? process.env.KRAKEN_MODO_REAL === 'true'
+          : process.env.BITGET_MODO_REAL === 'true';
+
       const status = dbHealthy ? 200 : 503;
       reply.status(status).send({
         status: dbHealthy ? 'HEALTHY' : 'DEGRADED',
         database: dbHealthy ? 'CONNECTED' : 'DISCONNECTED',
+        activeExchange: currentExchange,
+        activeMode: isReal ? 'real' : 'demo',
         uptime: process.uptime(),
         timestamp: Date.now()
       });

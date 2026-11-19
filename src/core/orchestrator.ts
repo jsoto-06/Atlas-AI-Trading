@@ -87,12 +87,12 @@ export class Orchestrator {
       // 1. Publish raw market data to Blackboard
       this.blackboard.writeMarketData(symbol, timeframe, marketTick, 300000, 30000);
 
-      // Separate fast and slow loop agents
+      // Separate fast and slow loop agents (RiskManager and Supervisor run in sequence at the end)
       const fastAgents: BaseAgent[] = [];
       const slowAgents: BaseAgent[] = [];
 
       for (const agent of this.agents.values()) {
-        if (agent.name === 'Supervisor') continue; // Supervisor runs at the end of the loop
+        if (agent.name === 'Supervisor' || agent.name === 'RiskManager') continue;
         
         if (agent.isFastLoop) {
           fastAgents.push(agent);
@@ -101,21 +101,28 @@ export class Orchestrator {
         }
       }
 
-      // 2. Execute Fast-Loop Quantitative Agents in Parallel
+      // 2. Execute Fast-Loop Quantitative Analysts in Parallel
       await this.logAudit('DEBUG', 'Orchestrator', `Executing Fast-Loop quantitative pipeline (${fastAgents.length} agents)...`);
       await Promise.all(fastAgents.map(agent => agent.execute(symbol, timeframe, activeCycleId)));
 
-      // 3. Execute Slow-Loop Cognitive Agents with strict timeout & AbortSignal propagation
+      // 3. Execute Slow-Loop Cognitive Analysts with strict timeout & AbortSignal propagation
       await this.logAudit('DEBUG', 'Orchestrator', `Executing Slow-Loop cognitive pipeline (${slowAgents.length} agents)...`);
       await this.executeSlowLoopWithTimeout(slowAgents, symbol, timeframe, activeCycleId);
 
-      // 4. Fire Supervisor Agent
+      // 4. Fire Supervisor Agent (Consensus Engine)
       const supervisor = this.agents.get('Supervisor');
       if (supervisor) {
         await this.logAudit('INFO', 'Orchestrator', 'Triggering Supervisor Agent for consensus and trade evaluation...');
         await supervisor.execute(symbol, timeframe, activeCycleId);
       } else {
         await this.logAudit('WARN', 'Orchestrator', 'Supervisor Agent is not registered. Cycle completed without decision scoring.');
+      }
+
+      // 5. Fire RiskManager Agent (Final Financial Firewall & Sizing based on Supervisor Decision)
+      const riskManager = this.agents.get('RiskManager');
+      if (riskManager) {
+        await this.logAudit('INFO', 'Orchestrator', 'Triggering RiskManager firewall to validate consensus decision...');
+        await riskManager.execute(symbol, timeframe, activeCycleId);
       }
 
       const duration = Date.now() - startTime;

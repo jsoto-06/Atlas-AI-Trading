@@ -363,7 +363,7 @@ Reglas críticas de negocio:
 - Todo texto explicativo, justificaciones y narrativas deben ser estrictamente en CASTELLANO.`;
 
         const response = await client.models.generateContent({
-          model: 'gemini-3.5-flash',
+          model: 'gemini-2.5-flash',
           contents: [
             {
               text: `Métricas de derivados y Pools de Liquidación basados en el libro de órdenes en tiempo real de Bitget:\n${JSON.stringify({ precioActual, ...rawData }, null, 2)}`

@@ -188,14 +188,23 @@ export class RiskManagerAgent extends BaseAgent {
       limits = this.DEFAULT_RISK_LIMITS;
     }
 
-    // Intentar sincronizar el capital de la cuenta con el saldo real disponible en Bitget (en entonos no-test)
-    if (process.env.NODE_ENV !== 'test' && process.env.BITGET_API_KEY) {
+    const currentCycle = this.blackboard.getActiveCycle(symbol, timeframe);
+    const isBacktest = currentCycle?.startsWith('BT_') || process.env.NODE_ENV === 'test';
+
+    // Intentar sincronizar el capital de la cuenta con el saldo real disponible en el broker activo (solo en trading en vivo)
+    if (!isBacktest) {
       try {
-        const broker = new (await import('../../execution/brokers/bitget-broker.ts')).BitgetBroker();
-        const liveBalance = await broker.getBalance('USDT');
-        if (liveBalance && liveBalance > 10) {
-          limits = { ...limits, accountSizeUSD: liveBalance };
-          console.log(`[RiskManagerAgent] Sincronizado capital base con el saldo real de Bitget: $${liveBalance.toFixed(2)} USDT`);
+        const broker = (await import('../../execution/brokers/broker-factory.ts')).BrokerFactory.getDefaultBroker();
+        if (broker.isConfigured()) {
+          const liveBalance = await broker.getBalance('USDT');
+          if (liveBalance !== undefined && !isNaN(liveBalance)) {
+            if (liveBalance > 0) {
+              limits = { ...limits, accountSizeUSD: liveBalance };
+              console.log(`[RiskManagerAgent] Sincronizado capital base con el saldo real de ${broker.nombreBroker}: $${liveBalance.toFixed(2)} USD`);
+            } else {
+              limits = { ...limits, accountSizeUSD: 0 };
+            }
+          }
         }
       } catch (balErr) {
         // Mantiene el fallback configurado
@@ -203,65 +212,70 @@ export class RiskManagerAgent extends BaseAgent {
     }
 
     // 2. Determinar el usuario activo y calcular los drawdowns reales desde la base de datos (trades cerrados)
-    try {
-      const filasSettings = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.key, 'global_risk_limits'))
-        .limit(1);
-
-      if (filasSettings && filasSettings.length > 0 && filasSettings[0].userId) {
-        userId = filasSettings[0].userId;
-      } else {
-        const firstUser = await db.select().from(users).limit(1);
-        if (firstUser && firstUser.length > 0) {
-          userId = firstUser[0].id;
-        }
-      }
-
-      if (userId !== null) {
-        const closedTrades = await db
+    if (isBacktest) {
+      currentDailyDrawdownUSD = 0;
+      currentTotalDrawdownUSD = 0;
+    } else {
+      try {
+        const filasSettings = await db
           .select()
-          .from(trades)
-          .where(
-            and(
-              eq(trades.status, 'CLOSED'),
-              eq(trades.userId, userId)
-            )
-          );
+          .from(settings)
+          .where(eq(settings.key, 'global_risk_limits'))
+          .limit(1);
 
-        const inicioHoy = new Date();
-        inicioHoy.setHours(0, 0, 0, 0);
-        const inicioHoyTime = inicioHoy.getTime();
-
-        let sumDailyPnL = 0;
-        let sumTotalPnL = 0;
-
-        for (const trade of closedTrades) {
-          const pnlVal = trade.pnl ? parseFloat(trade.pnl) : 0;
-          sumTotalPnL += pnlVal;
-
-          if (trade.exitTime) {
-            const exitTimeMs = new Date(trade.exitTime).getTime();
-            if (exitTimeMs >= inicioHoyTime) {
-              sumDailyPnL += pnlVal;
-            }
+        if (filasSettings && filasSettings.length > 0 && filasSettings[0].userId) {
+          userId = filasSettings[0].userId;
+        } else {
+          const firstUser = await db.select().from(users).limit(1);
+          if (firstUser && firstUser.length > 0) {
+            userId = firstUser[0].id;
           }
         }
 
-        currentDailyDrawdownUSD = sumDailyPnL < 0 ? Math.abs(sumDailyPnL) : 0;
-        currentTotalDrawdownUSD = sumTotalPnL < 0 ? Math.abs(sumTotalPnL) : 0;
+        if (userId !== null) {
+          const closedTrades = await db
+            .select()
+            .from(trades)
+            .where(
+              and(
+                eq(trades.status, 'CLOSED'),
+                eq(trades.userId, userId)
+              )
+            );
 
-        console.log(`[RiskManagerAgent] Drawdown real calculado para userId ${userId}: Diario USD: ${currentDailyDrawdownUSD}, Histórico USD: ${currentTotalDrawdownUSD}`);
+          const inicioHoy = new Date();
+          inicioHoy.setHours(0, 0, 0, 0);
+          const inicioHoyTime = inicioHoy.getTime();
+
+          let sumDailyPnL = 0;
+          let sumTotalPnL = 0;
+
+          for (const trade of closedTrades) {
+            const pnlVal = trade.pnl ? parseFloat(trade.pnl) : 0;
+            sumTotalPnL += pnlVal;
+
+            if (trade.exitTime) {
+              const exitTimeMs = new Date(trade.exitTime).getTime();
+              if (exitTimeMs >= inicioHoyTime) {
+                sumDailyPnL += pnlVal;
+              }
+            }
+          }
+
+          currentDailyDrawdownUSD = sumDailyPnL < 0 ? Math.abs(sumDailyPnL) : 0;
+          currentTotalDrawdownUSD = sumTotalPnL < 0 ? Math.abs(sumTotalPnL) : 0;
+
+          console.log(`[RiskManagerAgent] Drawdown real calculado para userId ${userId}: Diario USD: ${currentDailyDrawdownUSD}, Histórico USD: ${currentTotalDrawdownUSD}`);
+        }
+      } catch (dbError) {
+        console.warn('[RiskManagerAgent] DB no disponible en entorno local. Asumiendo $0 drawdown inicial.');
+        currentDailyDrawdownUSD = 0;
+        currentTotalDrawdownUSD = 0;
       }
-    } catch (dbError) {
-      console.warn('[RiskManagerAgent] DB no disponible en entorno local/backtest. Asumiendo $0 drawdown inicial.');
-      currentDailyDrawdownUSD = 0;
-      currentTotalDrawdownUSD = 0;
     }
 
     // 3. Obtener el spread real de Bitget (o usar fallback estimado de 0.04% en tests/backtests)
-    if (process.env.NODE_ENV === 'test') {
+    if (isBacktest) {
       spreadBitget = 0.0004;
     } else {
       try {
@@ -278,15 +292,15 @@ export class RiskManagerAgent extends BaseAgent {
       const snapshot = this.blackboard.getSnapshot(symbol, timeframe);
       let precioActual = snapshot.marketData?.value?.price;
 
-      // Fallback: Si el Blackboard aún no tiene marketData (ej: orden manual inicial), consultar ticker real de Bitget
+      // Fallback: Si el Blackboard aún no tiene marketData (ej: orden manual inicial), consultar ticker real del broker
       if (!precioActual || isNaN(precioActual) || precioActual <= 0) {
         try {
-          const broker = new (await import('../../execution/brokers/bitget-broker.ts')).BitgetBroker();
+          const broker = (await import('../../execution/brokers/broker-factory.ts')).BrokerFactory.getDefaultBroker();
           const liveTicker = await broker.getTicker(symbol);
           if (liveTicker && liveTicker.price > 0) {
             precioActual = liveTicker.price;
             this.blackboard.writeMarketData(symbol, timeframe, liveTicker);
-            console.log(`[RiskManagerAgent] Fallback de precio en tiempo real exitoso para ${symbol}: ${precioActual} USD`);
+            console.log(`[RiskManagerAgent] Fallback de precio en tiempo real exitoso (${broker.nombreBroker}) para ${symbol}: ${precioActual} USD`);
           }
         } catch (tickerErr) {
           // Fallback secundario silencioso
@@ -305,14 +319,19 @@ export class RiskManagerAgent extends BaseAgent {
       let rejection_reason: string | null = null;
       let justificacion = 'Aprobación del firewall de riesgo completada.';
 
-      // 1. Verificación de Parámetros Globales (Drawdown de Cuenta)
-      const dailyDrawdownPct = currentDailyDrawdownUSD / limits.accountSizeUSD;
-      const totalDrawdownPct = currentTotalDrawdownUSD / limits.accountSizeUSD;
+      // 1. Verificación de Saldo Disponible y Drawdown de Cuenta
+      if (limits.accountSizeUSD <= 0) {
+        safe_to_operate = false;
+        rejection_reason = 'Saldo disponible insuficiente en la cuenta (Saldo: $0.00). Deposita fondos en Kraken Futures para activar órdenes.';
+      }
 
-      if (dailyDrawdownPct >= limits.maxDailyDrawdown) {
+      const dailyDrawdownPct = limits.accountSizeUSD > 0 ? (currentDailyDrawdownUSD / limits.accountSizeUSD) : 0;
+      const totalDrawdownPct = limits.accountSizeUSD > 0 ? (currentTotalDrawdownUSD / limits.accountSizeUSD) : 0;
+
+      if (safe_to_operate && dailyDrawdownPct >= limits.maxDailyDrawdown) {
         safe_to_operate = false;
         rejection_reason = `Límite de Drawdown Diario Excedido. Actual: ${(dailyDrawdownPct * 100).toFixed(2)}% (Límite: ${(limits.maxDailyDrawdown * 100).toFixed(2)}%). Operaciones congeladas para mitigar pérdidas.`;
-      } else if (totalDrawdownPct >= limits.maxTotalDrawdown) {
+      } else if (safe_to_operate && totalDrawdownPct >= limits.maxTotalDrawdown) {
         safe_to_operate = false;
         rejection_reason = `Límite de Drawdown Total de la Cuenta Excedido. Actual: ${(totalDrawdownPct * 100).toFixed(2)}% (Límite: ${(limits.maxTotalDrawdown * 100).toFixed(2)}%). Bloqueo absoluto de riesgo activo.`;
       }
