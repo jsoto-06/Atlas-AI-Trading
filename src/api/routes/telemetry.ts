@@ -496,6 +496,18 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
             demo: { type: 'number' },
             real: { type: 'number' },
             activeMode: { type: 'string' },
+            position: {
+              type: ['object', 'null'],
+              properties: {
+                symbol: { type: 'string' },
+                side: { type: 'string' },
+                quantity: { type: 'number' },
+                entryPrice: { type: 'number' },
+                unrealizedPnl: { type: 'number' },
+                leverage: { type: 'number' }
+              },
+              additionalProperties: true
+            },
             timestamp: { type: 'number' }
           }
         }
@@ -536,17 +548,21 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
         }
       }
 
-      // Consultar Posición Activa Real en el modo operativo activo
+      // Consultar Posición Activa en el broker activo
       let bitgetPosition: any = null;
       try {
         const pos = await broker.getPosition('BTC/USDT');
         if (pos && Math.abs(pos.size) > 0) {
+          const side = pos.holdSide
+            ? (pos.holdSide.toLowerCase() === 'short' ? 'SHORT' : 'LONG')
+            : (pos.size > 0 ? 'LONG' : 'SHORT');
           bitgetPosition = {
             symbol: 'BTC/USDT',
-            side: pos.size > 0 ? 'LONG' : 'SHORT',
+            side,
             quantity: Math.abs(pos.size),
             entryPrice: pos.entryPrice,
-            unrealizedPnl: pos.unrealizedPnl
+            unrealizedPnl: Number((pos.unrealizedPnl || 0).toFixed(2)),
+            leverage: 10
           };
         }
       } catch (e) {

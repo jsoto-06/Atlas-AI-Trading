@@ -216,7 +216,11 @@ export class HyperliquidBroker extends BaseBroker {
       }
 
       // Slippage del 1.5% para órdenes a mercado
-      const targetSize = request.tamano ?? (request as any).cantidad ?? 0;
+      const rawTargetSize = request.tamano ?? (request as any).cantidad ?? 0;
+      // Si el tamaño viene expresado en nocional USD (ej. > 5 en BTC), convertirlo a cantidad nominal de la criptomoneda
+      const targetSize = currentPrice > 0 && rawTargetSize > 5
+        ? Number((rawTargetSize / currentPrice).toFixed(szDecimals))
+        : rawTargetSize;
       const limitPrice = request.precioLimite ?? (request as any).precio;
       const targetPrice = request.tipo === 'LIMIT' && limitPrice
         ? limitPrice
@@ -319,7 +323,11 @@ export class HyperliquidBroker extends BaseBroker {
     side: 'BUY' | 'SELL'
   ): Promise<ExecutionResult> {
     const currentPrice = await this.getMarketPrice(request.simbolo);
-    const targetSize = request.tamano ?? (request as any).cantidad ?? 0;
+    const rawTargetSize = request.tamano ?? (request as any).cantidad ?? 0;
+    // Si el tamaño viene expresado en nocional USD (ej. > 5 en BTC), convertirlo a cantidad nominal de la criptomoneda
+    const targetSize = currentPrice > 0 && rawTargetSize > 5
+      ? Number((rawTargetSize / currentPrice).toFixed(4))
+      : rawTargetSize;
     const limitPrice = request.precioLimite ?? (request as any).precio;
     const execPrice = request.tipo === 'LIMIT' && limitPrice ? limitPrice : currentPrice;
     const clientOid = request.clientOid || `sim_${Date.now()}_${Math.random().toString(36).substring(7)}`;
