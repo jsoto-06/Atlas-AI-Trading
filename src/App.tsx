@@ -143,6 +143,19 @@ export default function App() {
     takeProfit: number;
   } | null>(null);
 
+  // Orders History from Postgres DB
+  const [ordersHistory, setOrdersHistory] = useState<Array<{
+    id: number;
+    clientOid: string;
+    symbol: string;
+    side: string;
+    orderType: string;
+    size: string;
+    leverage: number;
+    status: string;
+    createdAt: string;
+  }>>([]);
+
   // Live Audit Logs Array
   const [logs, setLogs] = useState<SimulatedLog[]>([
     {
@@ -530,16 +543,37 @@ export default function App() {
     }
   };
 
+  const fetchOrdersHistory = async () => {
+    if (!adminToken) return;
+    try {
+      const res = await fetch('/api/v1/telemetry/orders?limit=30', {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setOrdersHistory(data);
+        }
+      }
+    } catch {
+      // Silencioso
+    }
+  };
+
   useEffect(() => {
     if (adminToken) {
       fetchApiConfig();
       fetchBalances();
       fetchEngineStatus();
       fetchTelemetryState();
+      fetchOrdersHistory();
       const interval = setInterval(() => {
         fetchBalances();
         fetchEngineStatus();
         fetchTelemetryState();
+        fetchOrdersHistory();
       }, 5000);
       return () => clearInterval(interval);
     }
@@ -548,6 +582,9 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'api-config' && adminToken) {
       fetchApiConfig();
+    }
+    if (activeTab === 'terminal' && adminToken) {
+      fetchOrdersHistory();
     }
   }, [activeTab]);
 
@@ -2318,6 +2355,79 @@ export default function App() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Historial de Órdenes Despachadas (Auditoría en PostgreSQL) */}
+                <div className={`p-5 rounded-2xl border transition-all ${
+                  isDark ? 'bg-[#0c0e18] border-[#181c30]' : 'bg-white border-slate-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-inherit">
+                    <span className="font-display font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-cyan-400" />
+                      Historial de Órdenes en Base de Datos ({ordersHistory.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fetchOrdersHistory}
+                      className="text-[10px] font-mono text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Actualizar
+                    </button>
+                  </div>
+
+                  {ordersHistory.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[260px] overflow-y-auto">
+                      <table className="w-full font-mono text-xs text-left">
+                        <thead>
+                          <tr className={`border-b text-[10px] uppercase text-slate-400 ${
+                            isDark ? 'border-slate-800' : 'border-slate-200'
+                          }`}>
+                            <th className="py-2 px-2">Hora</th>
+                            <th className="py-2 px-2">Símbolo</th>
+                            <th className="py-2 px-2">Lado</th>
+                            <th className="py-2 px-2">Apal.</th>
+                            <th className="py-2 px-2">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/20">
+                          {ordersHistory.map(ord => (
+                            <tr key={ord.id} className="hover:bg-white/5 transition-colors">
+                              <td className="py-2 px-2 text-slate-400 text-[11px]">
+                                {new Date(ord.createdAt).toLocaleTimeString()}
+                              </td>
+                              <td className="py-2 px-2 font-bold">{ord.symbol}</td>
+                              <td className="py-2 px-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  ord.side === 'BUY'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : 'bg-rose-500/20 text-rose-400'
+                                }`}>
+                                  {ord.side}
+                                </span>
+                              </td>
+                              <td className="py-2 px-2 text-slate-300">{ord.leverage}x</td>
+                              <td className="py-2 px-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  ord.status === 'FILLED'
+                                    ? 'bg-cyan-500/20 text-cyan-400'
+                                    : ord.status === 'CREATED'
+                                      ? 'bg-amber-500/20 text-amber-400'
+                                      : 'bg-slate-500/20 text-slate-400'
+                                }`}>
+                                  {ord.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-xs font-mono text-slate-400">
+                      No hay órdenes registradas aún en PostgreSQL.
+                    </div>
+                  )}
                 </div>
 
               </div>

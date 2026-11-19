@@ -10,6 +10,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { BaseBroker } from './base-broker.ts';
 import { OrderRequest, ExecutionResult } from '../types.ts';
 import { ExchangeId, PositionInfo, TickerInfo, OrderQueryInfo } from './types.ts';
+import { db } from '../../db/index.ts';
+import { trades } from '../../db/schema.ts';
 
 interface SimulatedPosition {
   symbol: string;
@@ -337,11 +339,45 @@ export class HyperliquidBroker extends BaseBroker {
     const existing = this.simPositions.get(coin);
     if (existing) {
       if ((existing.side === 'long' && side === 'SELL') || (existing.side === 'short' && side === 'BUY')) {
+        const closedSize = Math.min(existing.size, targetSize);
+        const realizedPnl = existing.side === 'long'
+          ? (execPrice - existing.entryPrice) * closedSize
+          : (existing.entryPrice - execPrice) * closedSize;
+
+        if (!this.simBalance || this.simBalance <= 0) this.simBalance = 1000;
+        this.simBalance = Number((this.simBalance + realizedPnl).toFixed(2));
+
         const netSize = existing.size - targetSize;
         if (netSize <= 0.00001) {
           this.simPositions.delete(coin);
         } else {
           existing.size = netSize;
+        }
+
+        // Persistir trade cerrado en DB para historial forense y cálculo de métricas
+        try {
+          db.insert(trades).values({
+            userId: 1,
+            symbol: request.simbolo,
+            exchange: 'hyperliquid',
+            side: existing.side === 'long' ? 'LONG' : 'SHORT',
+            positionType: 'futures',
+            leverage: request.leverage || 10,
+            entryPrice: existing.entryPrice.toString(),
+            exitPrice: execPrice.toString(),
+            quantity: closedSize.toString(),
+            status: 'CLOSED',
+            pnl: realizedPnl.toFixed(4),
+            pnlPercentage: (existing.entryPrice > 0 ? (realizedPnl / (existing.entryPrice * closedSize)) * 100 * (request.leverage || 10) : 0).toFixed(2),
+            entryTime: new Date(existing.timestamp),
+            exitTime: new Date()
+          }).then(() => {
+            console.log(`[HyperliquidBroker] Trade cerrado guardado en PostgreSQL. PnL realizado: $${realizedPnl.toFixed(2)} USD. Saldo actualizado: $${this.simBalance} USD.`);
+          }).catch(err => {
+            console.warn(`[HyperliquidBroker] Aviso al guardar trade en DB: ${err.message || err}`);
+          });
+        } catch {
+          // Silencioso
         }
       } else {
         existing.size += targetSize;

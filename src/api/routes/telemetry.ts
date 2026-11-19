@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { db } from '../../db/index.ts';
-import { settings, learningPerformance, trades, auditLogs } from '../../db/schema.ts';
+import { settings, learningPerformance, trades, auditLogs, orders } from '../../db/schema.ts';
 
 import { Blackboard } from '../../core/blackboard.ts';
 import { MetricsCalculator } from '../../analytics/metrics-calculator.ts';
@@ -603,6 +603,54 @@ export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
       return logs;
     } catch (error: any) {
       fastify.log.error(`Error en GET /telemetry/logs: ${error.message}`);
+      return [];
+    }
+  });
+
+  /**
+   * 9. GET /api/v1/telemetry/orders
+   * Obtiene el historial de órdenes persistidas en PostgreSQL.
+   */
+  fastify.get('/orders', { preHandler: adminAuthHook }, async (request, reply) => {
+    try {
+      const limit = Math.min(100, Math.max(1, parseInt((request.query as any)?.limit) || 50));
+      let orderList: any[] = [];
+      try {
+        orderList = await db
+          .select()
+          .from(orders)
+          .orderBy(desc(orders.createdAt))
+          .limit(limit);
+      } catch (e) {
+        // Fallback
+      }
+      return orderList;
+    } catch (error: any) {
+      fastify.log.error(`Error en GET /telemetry/orders: ${error.message}`);
+      return [];
+    }
+  });
+
+  /**
+   * 10. GET /api/v1/telemetry/trades
+   * Obtiene el historial de operaciones cerradas con PnL realizado.
+   */
+  fastify.get('/trades', { preHandler: adminAuthHook }, async (request, reply) => {
+    try {
+      const limit = Math.min(100, Math.max(1, parseInt((request.query as any)?.limit) || 50));
+      let tradeList: any[] = [];
+      try {
+        tradeList = await db
+          .select()
+          .from(trades)
+          .orderBy(desc(trades.entryTime))
+          .limit(limit);
+      } catch (e) {
+        // Fallback
+      }
+      return tradeList;
+    } catch (error: any) {
+      fastify.log.error(`Error en GET /telemetry/trades: ${error.message}`);
       return [];
     }
   });
